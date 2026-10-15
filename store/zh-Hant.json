@@ -1,0 +1,16 @@
+{
+  "language": "zh-Hant",
+  "name": "Pearl Hub — PRL 錢包",
+  "shortDescription": "本機 PRL 錢包：建立、恢復、收付款、通訊錄、公開行情與金鑰加密。",
+  "detailedDescription": "在瀏覽器側邊欄或完整頁面管理 PRL。建立 12 個英文單詞的錢包，或用原生 Pearl Hub 的 12/24 個英文助記詞恢復。最多管理 10 個錢包，支援主網/測試網、收款 QR、輪換地址、餘額、附對方地址的交易記錄與通訊錄。\n\n主網可顯示美元及 17 種副貨幣之一的估值。公開行情請求不傳送錢包地址。可用目前地址開啟網頁礦機監控或唯讀錢包：僅預填，儲存須在網頁確認。自願捐贈使用固定主網地址，先看預覽再輸入密碼確認。\n\n助記詞與待確認的簽名交易以 AES-256-GCM 在本機加密。核對收款地址、金額、手續費及合計並再次輸入密碼後，本機簽名再廣播。廣播結果不明時保留原交易並預留輸入以供核對與重試。5 分鐘無操作及瀏覽器重啟後自動鎖定。\n\n無廣告、統計、內容腳本、遠端可執行程式碼或網站簽名介面。Blockbook 接收公開帳戶公鑰/地址以查詢鏈上資料，以及明確確認的簽名交易。通訊錄和偏好儲存在瀏覽器本機。支援與原生 App 一致的 16 種介面語言。\n\n只同步聯絡人；助記詞、私鑰和錢包密碼保留在本機。 已驗證地址路徑的輸入均可簽名；歷史找零掃描只讀取轉出記錄，支援分頁和增量更新。\n\nVerified paths support any non-hardened child index. Manual pathless discovery covers the first 10,000 internal addresses. Sixteen interface languages; 17 secondary currencies. Only PRL Taproot addresses; no independent security audit. Screenshots use simulated public fixtures.\n\nOptional email account login syncs public contacts with Web and native apps. It uses a separate account session; locking or deleting a wallet does not sign out the account. Wallet secrets stay local.",
+  "permissionJustifications": {
+    "storage": "本機儲存加密錢包、加密待確認交易、公開聯絡人與偏好；解鎖金鑰只保留在可信工作階段至鎖定，不使用 Chrome 帳號同步。",
+    "alarms": "每分鐘檢查一次無操作狀態，實現 5 分鐘自動鎖定。",
+    "sidePanel": "點擊工具列圖示時在瀏覽器側邊欄開啟本機錢包介面。",
+    "https://blockbook.pearlresearch.ai/*": "查詢主網餘額、公開帳戶/地址歷史、UTXO、手續費與交易狀態；僅廣播使用者明確確認的本機簽名交易。",
+    "https://blockbook.testnet.pearlresearch.ai/*": "相同鏈上查詢與明確確認的廣播，僅用於測試網。",
+    "https://pearlhub.net/*": "Public market requests carry no wallet identity. Optional email account login and authenticated configuration sync share contact names, public addresses and notes. Account data is encrypted at rest and readable by the server; wallet seed phrases, private keys and passwords are never uploaded.",
+    "identity": "Opens the Pearl Hub email sign-in page and receives a one-use PKCE authorization callback. Does not read your Google or Microsoft account."
+  },
+  "dataUseDisclosure": "金融資料：為錢包功能處理公開錢包/帳戶地址、餘額、交易歷史及明確確認的簽名交易；Blockbook 接收鏈上查詢和簽名廣播。助記詞、私鑰、密碼留在裝置。聯絡人名稱/地址/備註和偏好留在本機。行情服務僅收到無錢包身分的公開 GET；網路基礎設施可看到 IP。使用者點擊深鏈後公開地址經 URL 片段交給網頁，網頁隨後可能查詢地址。無統計、廣告、販售資料、瀏覽歷史收集或 Chrome 帳號同步。不能勾選「完全不使用資料」：本機與公開索引器仍會處理金融資料。 Optional email accounts store email, public contacts and device/session metadata on Cloudflare. Configuration is encrypted at rest; the server can read it. Sign out restores the previous guest contacts. Cloud configuration export and account deletion are available on the account page."
+}

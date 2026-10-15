@@ -1,0 +1,8 @@
+{
+  "name": {
+    "message": "Pearl Hub — PRL Wallet"
+  },
+  "description": {
+    "message": "A local PRL wallet with recovery, receive/send, contacts, public prices and encrypted keys."
+  }
+}

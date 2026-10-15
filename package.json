@@ -1,0 +1,38 @@
+{
+  "name": "pearl-hub-wallet",
+  "version": "0.1.2",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit && vite build",
+    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "package": "npm run build && python3 package.py",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@scure/btc-signer": "2.4.1",
+    "@scure/bip32": "2.4.0",
+    "@scure/bip39": "2.4.0",
+    "@scure/base": "2.0.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "qrcode-generator": "2.0.4"
+  },
+  "devDependencies": {
+    "vite": "8.3.4",
+    "typescript": "5.9.3",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@types/chrome": "0.1.38",
+    "playwright": "1.58.2"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/terryops/prl-hub-wallet.git"
+  },
+  "homepage": "https://pearlhub.net",
+  "engines": {
+    "node": ">=22.6.0"
+  }
+}

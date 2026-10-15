@@ -1,0 +1,16 @@
+{
+  "language": "zh-Hans",
+  "name": "Pearl Hub — PRL 钱包",
+  "shortDescription": "本机 PRL 钱包：创建、恢复、收付款、通讯录、公开行情和密钥加密。",
+  "detailedDescription": "在浏览器侧边栏或完整页面管理 PRL。创建 12 个英文单词的钱包，或用原生 Pearl Hub 的 12/24 个英文助记词恢复。最多管理 10 个钱包，支持主网/测试网、收款二维码、轮换收款地址、余额、带对方地址的交易记录及通讯录选款。\n\n主网可显示美元及 17 种副货币之一的估值。公开行情请求不发送钱包地址。可用当前地址打开网页矿机监控或只读钱包：只预填，保存须在网页确认。自愿捐赠使用固定主网地址，先看预览再输入密码确认。\n\n助记词和待确认的签名交易以 AES-256-GCM 在本机加密。核对收款地址、金额、手续费和合计并再次输入密码后，本机签名再广播。广播结果不明确时保留原交易并预留输入，便于核对和重试。5 分钟无操作及浏览器重启后自动锁定。\n\n无广告、统计、内容脚本、远程可执行代码或网站签名接口。Blockbook 接收公开账户公钥/地址以查询链上数据，以及明确确认的签名交易。通讯录和偏好保存在浏览器本机。支持与原生 App 一致的 16 种界面语言。\n\n\n\nVerified paths support any non-hardened child index. Manual pathless discovery covers the first 10,000 internal addresses. Sixteen interface languages; 17 secondary currencies. Only PRL Taproot addresses; no independent security audit. Screenshots use simulated public fixtures.\n\nOptional email account login syncs public contacts with Web and native apps. It uses a separate account session; locking or deleting a wallet does not sign out the account. Wallet secrets stay local.",
+  "permissionJustifications": {
+    "storage": "本机保存加密钱包、加密待确认交易、公开联系人及偏好；解锁密钥只保留在可信会话至锁定，不使用 Chrome 账号同步。",
+    "alarms": "每分钟检查一次无操作状态，实现 5 分钟自动锁定。",
+    "sidePanel": "点击工具栏图标时在浏览器侧边栏打开本机钱包界面。",
+    "https://blockbook.pearlresearch.ai/*": "查询主网余额、公开账户/地址历史、UTXO、手续费和交易状态；仅广播用户明确确认的本机签名交易。",
+    "https://blockbook.testnet.pearlresearch.ai/*": "相同链上查询及明确确认的广播，仅用于测试网。",
+    "https://pearlhub.net/*": "Public market requests carry no wallet identity. Optional email account login and authenticated configuration sync share contact names, public addresses and notes. Account data is encrypted at rest and readable by the server; wallet seed phrases, private keys and passwords are never uploaded.",
+    "identity": "Opens the Pearl Hub email sign-in page and receives a one-use PKCE authorization callback. Does not read your Google or Microsoft account."
+  },
+  "dataUseDisclosure": "金融数据：为钱包功能处理公开钱包/账户地址、余额、交易历史和明确确认的签名交易；Blockbook 接收链上查询及签名广播。助记词、私钥、密码留在设备。联系人名称/地址/备注和偏好留在本机。行情服务只收到无钱包身份的公开 GET；网络基础设施可看到 IP。用户点击深链后公开地址通过 URL 片段交给网页，网页随后可能查询地址。无统计、广告、售卖数据、浏览历史收集或 Chrome 账号同步。不能勾选“完全不使用数据”：本机和公开索引器仍会处理金融数据。 Optional email accounts store email, public contacts and device/session metadata on Cloudflare. Configuration is encrypted at rest; the server can read it. Sign out restores the previous guest contacts. Cloud configuration export and account deletion are available on the account page."
+}
