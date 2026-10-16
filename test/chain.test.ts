@@ -156,3 +156,16 @@ test("invalid fee estimates fail so the caller can label the fallback correctly"
     assert.equal(await estimateFee("mainnet"), 50000);
   } finally { globalThis.fetch = original; }
 });
+test("a full change scan over more spends than a call accepts as arguments still reports the scan height", async () => {
+  // 1,500 indexer pages of 100 spends: Math.max(...spends) overflows the engine's argument limit.
+  const original = globalThis.fetch, pages = 1500;
+  globalThis.fetch = async (url) => {
+    const u = new URL(String(url));
+    if (u.pathname.includes("/utxo/")) return Response.json([]);
+    const page = Number(u.searchParams.get("page"));
+    if (u.searchParams.get("filter") === "inputs") return Response.json({ totalPages: pages, transactions: Array.from({ length: 100 }, (_, i) => ({ txid: "s", blockHeight: page * 100 + i, confirmations: page === pages && i === 99 ? 0 : 1 })) });
+    return Response.json({ balance: "0", page: 1, totalPages: 1, transactions: [] });
+  };
+  try { assert.equal((await loadAccount(vectors.xpub, "mainnet", "test", [], 1, true)).scanHeight, pages * 100 + 98); }
+  finally { globalThis.fetch = original; }
+});

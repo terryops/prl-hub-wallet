@@ -1,4 +1,4 @@
-# Pearl Hub Wallet
+# PRL Wallet — Open source Wallet from Pearl Hub
 
 A self-custody browser wallet for Pearl (PRL), for Chrome and Edge: create or restore
 wallets, view balances and history, receive, and sign and send PRL on your own device.

@@ -4,7 +4,8 @@ import { readFileSync } from "node:fs";
 import { contactChanges, syncContacts, CONTACT_LINK } from "../src/contact-sync.ts";
 import { CONTACTS } from "../src/contacts.ts";
 import { ACCOUNT, logoutAccount } from "../src/account.ts";
-import { configOf, defaults } from "../shared/store.ts";
+import { configOf, defaults, mergeItems } from "../shared/store.ts";
+import type { Item } from "../shared/types.ts";
 const vectors = JSON.parse(readFileSync(new URL("./native-vectors.json", import.meta.url), "utf8"));
 const contact = { id: "contact-1", name: "Friend", address: vectors.addresses[0], note: "", updated: 10, future: { keep: true } };
 test("contact baseline retains timestamps, marks actual edits and carries deletion tombstones", () => {
@@ -115,5 +116,52 @@ test("free accounts check membership without reading or uploading contacts, and 
     assert.equal(result.lastSync, undefined); assert.equal(requests.length, 1);
     assert.deepEqual(storage[CONTACTS], [contact]);
     assert.deepEqual(storage[CONTACT_LINK], { userId, base: { [contact.id]: contact } });
+  } finally { globalThis.fetch = original; }
+});
+test("a newer edit or restore beats an older deletion in either merge order", () => {
+  const removed = { id: "a", updated: 100, deleted: true }, edited = { id: "a", updated: 200, name: "edited" };
+  for (const [left, right] of [[[removed], [edited]], [[edited], [removed]]]) {
+    const [merged] = mergeItems<Item>(left, right);
+    assert.equal(merged.deleted, undefined); assert.equal(merged.name, "edited"); assert.equal(merged.updated, 200);
+  }
+  const live = { id: "a", updated: 100, name: "old", future: { keep: true } }, newer = { id: "a", updated: 200, deleted: true };
+  for (const [left, right] of [[[live], [newer]], [[newer], [live]]]) {
+    const [merged] = mergeItems<Item>(left, right);
+    assert.equal(merged.deleted, true); assert.deepEqual(merged.future, { keep: true }, "the loser still fills fields the winner lacks");
+  }
+});
+test("an unchanged contact list is not uploaded again", async () => {
+  const userId = "u_account-fixture", original = fetch;
+  const storage: Record<string, unknown> = { [ACCOUNT]: { user_id: userId, access_token: "A".repeat(43), refresh_token: "B".repeat(43), expires_at: Date.now() + 900000 }, [CONTACTS]: [contact], [CONTACT_LINK]: { userId, base: {} } };
+  Object.assign(globalThis, { chrome: { storage: { local: { get: async (key: string) => ({ [key]: storage[key] }), set: async (rows: object) => Object.assign(storage, rows) } } } });
+  let config: unknown = configOf(defaults()), rev = 0, puts = 0;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith("/v1/account")) return Response.json({ pro: true });
+    if (init!.method === "GET") return Response.json({ rev, schema_version: 1, data: config });
+    puts++; rev++; config = JSON.parse(init!.body as string).data; return Response.json({});
+  };
+  try {
+    await syncContacts(() => {}); assert.equal(puts, 1);
+    await syncContacts(() => {}); await syncContacts(() => {});
+    assert.equal(puts, 1, "repeated syncs without changes keep the server revision");
+    assert.equal((storage[CONTACT_LINK] as { lastSync?: number }).lastSync! > 0, true);
+    storage[CONTACTS] = [{ ...contact, name: "Edited" }];
+    await syncContacts(() => {}); assert.equal(puts, 2);
+  } finally { globalThis.fetch = original; }
+});
+test("a contact edited on this browser after another device deleted it is kept everywhere", async () => {
+  const userId = "u_account-fixture", original = fetch;
+  const storage: Record<string, unknown> = { [ACCOUNT]: { user_id: userId, access_token: "A".repeat(43), refresh_token: "B".repeat(43), expires_at: Date.now() + 900000 }, [CONTACTS]: [{ ...contact, name: "Edited here" }], [CONTACT_LINK]: { userId, base: { [contact.id]: contact } } };
+  Object.assign(globalThis, { chrome: { storage: { local: { get: async (key: string) => ({ [key]: storage[key] }), set: async (rows: object) => Object.assign(storage, rows) } } } });
+  let uploaded: { id: string; name?: string; deleted?: boolean }[] = [];
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith("/v1/account")) return Response.json({ pro: true });
+    if (init!.method === "GET") return Response.json({ rev: 1, schema_version: 1, data: { ...configOf(defaults()), contacts: [{ id: contact.id, updated: 20, deleted: true }] } });
+    uploaded = JSON.parse(init!.body as string).data.contacts; return Response.json({});
+  };
+  try {
+    await syncContacts(() => {});
+    assert.equal(uploaded.length, 1); assert.equal(uploaded[0].deleted, undefined); assert.equal(uploaded[0].name, "Edited here");
+    assert.deepEqual((storage[CONTACTS] as { name: string }[]).map((c) => c.name), ["Edited here"]);
   } finally { globalThis.fetch = original; }
 });

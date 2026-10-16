@@ -159,8 +159,13 @@ function App() {
       const at = epoch.current;
       rpc<View>("status").then((v) => { if (at === epoch.current) setView(v); }).catch(() => {});
     }, 15000);
+    // Like the contact sync, the periodic chain refresh stays silent: it neither disables buttons
+    // nor clears a status the user is reading, such as an unconfirmed broadcast.
     const chainTimer = setInterval(() => {
-      if (!running.current && viewRef.current && !viewRef.current.locked && document.visibilityState === "visible") void act("refresh");
+      const v = viewRef.current;
+      if (running.current || !v || v.locked || document.visibilityState !== "visible") return;
+      const at = epoch.current;
+      rpc<View>("refresh", { expectedWalletId: v.selected, expectedNetwork: v.network }).then((next) => { if (at === epoch.current) setView(next); }).catch(() => {});
     }, 60000);
     return () => { clearInterval(timer); clearInterval(chainTimer); chrome.runtime.onMessage.removeListener(onLock); };
   }, []);

@@ -67,3 +67,58 @@ test("create wallet during refresh leaves the panel closed, then generates all w
   assert.equal(wordGrid(render()).props.children.flat(Infinity).length, 12);
   assert.deepEqual(calls, ["refresh", "generate"]);
 });
+test("the periodic chain refresh keeps the status the user is reading and leaves buttons enabled", async () => {
+  const hooks: any[] = []; let cursor = 0, root: any, effects: (() => void)[] | null = [];
+  const view = { exists: true, locked: false, selected: "one", network: "mainnet", wallets: [{ id: "one", name: "A", address: "prl1" + "a".repeat(38), index: 0 }], pending: [] };
+  const intervals: { fn: () => void; ms: number }[] = [], calls: { command: string; [key: string]: unknown }[] = [];
+  let failNext = false, release!: (v: unknown) => void;
+  const React = {
+    createElement: (type: unknown, props: any, ...children: any[]) => ({ type, props: { ...props, children } }),
+    useState(initial: any) {
+      const at = cursor++;
+      if (!(at in hooks)) hooks[at] = at === 2 ? view : typeof initial === "function" ? initial() : initial;
+      return [hooks[at], (value: any) => { hooks[at] = typeof value === "function" ? value(hooks[at]) : value; }];
+    },
+    useRef(initial: any) { const at = cursor++; return hooks[at] ||= { current: initial }; },
+    useEffect(fn: () => void) { effects?.push(fn); },
+  };
+  const compiled = ts.transpileModule(readFileSync(new URL("../src/main.tsx", import.meta.url), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+  }).outputText;
+  const listeners = { addListener() {}, removeListener() {} };
+  vm.runInNewContext(compiled, {
+    exports: {}, navigator: { languages: ["zh-CN"] }, AbortController,
+    document: { getElementById: () => ({}), documentElement: {}, visibilityState: "visible", addEventListener() {}, removeEventListener() {} },
+    setInterval: (fn: () => void, ms: number) => { intervals.push({ fn, ms }); return intervals.length; }, clearInterval() {},
+    setTimeout: () => 0, clearTimeout() {},
+    chrome: { i18n: { getUILanguage: () => "zh-CN" }, storage: { onChanged: listeners, local: { get: async () => ({}), set: async () => {} } }, runtime: {
+      id: "test", onMessage: listeners, getManifest: () => ({ version: "test" }),
+      async sendMessage(message: { command: string }) {
+        calls.push(message);
+        if (message.command === "refresh" && failNext) { failNext = false; return { ok: false, error: "广播结果待核对，请查看待确认转账。不要重复创建付款。" }; }
+        if (message.command === "refresh") return new Promise((resolve) => { release = (data) => resolve({ ok: true, data }); });
+        if (message.command === "contact-link") return { ok: true, data: { connected: false } };
+        return { ok: true, data: message.command === "status" ? view : {} };
+      },
+    } },
+    require: (name: string) => name === "react" ? React : name === "react-dom/client" ? { createRoot: () => ({ render: (element: any) => { root = element; } }) } : name.includes("wallet.ts") ? wallet : name.includes("chain.ts") ? { origin: () => "https://unused.invalid" } : name.includes("i18n/") ? i18n : name.includes("market.ts") ? { ...market, loadMarket: async () => ({}) } : name.includes("feature-copy.ts") ? featureCopy : name.includes("contacts.ts") ? contacts : name.includes("donation.ts") ? donation : name.includes("web-links.ts") ? webLinks : name.includes("security-overview.ts") ? securityOverview : {},
+  });
+  const render = () => { cursor = 0; return root.type(); };
+  const flat = (tree: any): any[] => tree && typeof tree === "object" ? [tree, ...[tree.props?.children].flat(Infinity).flatMap(flat)] : [];
+  const find = (tree: any, label: string) => flat(tree).find((n) => n.type === "button" && (n.props["aria-label"] === label || [n.props.children].flat(Infinity).includes(label)));
+  const status = (tree: any) => flat(tree).find((n) => n.props?.role === "status");
+  const settle = () => new Promise((resolve) => setImmediate(resolve));
+  render(); const mounted = effects!; effects = null; mounted.forEach((fn) => fn()); await settle();
+  // A manual refresh leaves a status the user must read.
+  failNext = true; await find(render(), "刷新 ↻").props.onClick(); await settle();
+  assert.ok(status(render()), "the manual refresh shows its status");
+  calls.length = 0;
+  for (const timer of intervals.filter((t) => t.ms === 60000)) timer.fn();
+  await settle();
+  assert.deepEqual(calls.filter((c) => c.command === "refresh").map((c) => [c.expectedWalletId, c.expectedNetwork]), [["one", "mainnet"]]);
+  assert.ok(status(render()), "the periodic refresh keeps the status");
+  assert.equal(find(render(), "＋ 创建钱包").props.disabled, false, "buttons stay enabled while it runs");
+  release({ ...view, snapshot: { network: "mainnet", walletId: "one", balance: "5", pending: "0", utxos: [], history: [], page: 1, hasMore: false, changeAddresses: [], time: 1 } });
+  await settle();
+  assert.equal(hooks[2].snapshot.balance, "5"); assert.ok(status(render()));
+});

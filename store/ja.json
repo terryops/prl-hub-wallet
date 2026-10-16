@@ -1,6 +1,6 @@
 {
   "language": "ja",
-  "name": "Pearl Hub — PRL Wallet",
+  "name": "PRL Wallet — Pearl Hub のオープンソースウォレット",
   "shortDescription": "ウォレットを作成 · 既存のウォレットを復元 · 端末内で暗号化 · 端末内で署名",
   "detailedDescription": "PRL ウォレットを作成するか、ネイティブアプリのリカバリーフレーズで復元します。鍵はこの端末に暗号化して保存されます。\n\n最大 10 個のウォレットを管理できます。\n\n5 分間操作がないと自動ロックされます。ブラウザー再起動後は再度ロックを解除してください。\n\nリカバリーフレーズや秘密鍵はチェーンサービスに送信されません。ネイティブウォレットの復元後、過去の釣り銭を検索して旧アドレスの資金を確認してください。\n\nプレビューは 3 分で失効します。確認時にこの端末で署名し、署名済み取引を送信します。\n\n応答が失われても送金されている可能性があります。状態を確認するか、同じ取引を再送してください。\n\n端末内の記録のみ削除します。先にフレーズをバックアップしてください。オンチェーンの資金は自動送金されません。\n\n連絡先のみ同期します。フレーズ、秘密鍵、ウォレットのパスワードはこの端末に保持されます。 検証済みのアドレスパスを持つ入力に署名できます。釣り銭の検索は送金履歴のみを読み、ページ分割と差分更新に対応します。\n\nVerified paths support any non-hardened child index. Manual pathless discovery covers the first 10,000 internal addresses. Sixteen interface languages; 17 secondary currencies. Only PRL Taproot addresses; no independent security audit. Screenshots use simulated public fixtures.\n\nOptional email account login syncs public contacts with Web and native apps. It uses a separate account session; locking or deleting a wallet does not sign out the account. Wallet secrets stay local.",
   "permissionJustifications": {

@@ -57,7 +57,7 @@ async function status() {
     const snapshot = (await chrome.storage.session.get(SNAPSHOT))[SNAPSHOT] as Snapshot | undefined;
     assertEpoch(epoch);
     return { exists, locked: false, network: data.network, selected: data.selected,
-      wallets: data.wallets.map((w) => ({ id: w.id, name: w.name, index: w.receiveIndex, primaryAddress: derived(xpub(w.mnemonic, data.network), data.network, 0, 0).address, address: derived(xpub(w.mnemonic, data.network), data.network, 0, w.receiveIndex).address })),
+      wallets: data.wallets.map((w) => { const key = xpub(w.mnemonic, data.network); return { id: w.id, name: w.name, index: w.receiveIndex, primaryAddress: derived(key, data.network, 0, 0).address, address: derived(key, data.network, 0, w.receiveIndex).address }; }),
       pending: data.pending.filter((p) => p.walletId === data.selected && p.network === data.network).map(({ hex: _hex, inputs: _inputs, ...p }) => p),
       snapshot: snapshot?.walletId === data.selected && snapshot.network === data.network ? snapshot : undefined };
   } catch { return { exists, locked: true }; }
@@ -90,10 +90,16 @@ async function refresh(page = 1, scan = false) {
   await save(current.data);
   const previous = (await chrome.storage.session.get(SNAPSHOT))[SNAPSHOT] as Snapshot | undefined;
   assertEpoch(epoch);
-  if (page > 1 && previous?.walletId === w.id && previous.network === data.network) {
-    const history = new Map(previous.history.map((tx) => [tx.txid, tx]));
+  const same = previous?.walletId === w.id && previous.network === data.network;
+  // A page-1 refresh keeps the older pages loaded with 加载更多 only while its first page still reaches a
+  // transaction that was already confirmed: everything older than that was loaded before, so nothing is
+  // skipped. Unconfirmed entries are not carried over, since they may have left the mempool.
+  const keep = same && previous.page > 1 && snapshot.history.some((tx) => (previous.history.find((old) => old.txid === tx.txid)?.confirmations || 0) > 0);
+  if (same && (page > 1 || keep)) {
+    const history = new Map(previous.history.filter((tx) => page > 1 || tx.confirmations > 0).map((tx) => [tx.txid, tx]));
     snapshot.history.forEach((tx) => history.set(tx.txid, tx));
     snapshot.history = [...history.values()].sort((a, b) => b.time - a.time);
+    if (page === 1) { snapshot.page = previous.page; snapshot.hasMore = previous.hasMore; }
   }
   await chrome.storage.session.set({ [SNAPSHOT]: snapshot });
   return snapshot;
@@ -105,13 +111,30 @@ async function broadcast(p: Pending) {
     const response = await fetch(origin(p.network) + "/api/v2/sendtx/", { method: "POST", body: p.hex, headers: { "Content-Type": "text/plain" }, credentials: "omit", redirect: "error", signal: AbortSignal.timeout(25000) });
     const body = await response.json();
     if (response.ok && body.result === p.txid || typeof body.error === "string" && /already.*(known|block chain|mempool)/i.test(body.error)) return "submitted" as const;
-    if (typeof body.error === "string" && /min relay fee|mempool min fee|insufficient fee|inputs-missingorspent|mandatory-script-verify-flag-failed|bad-txns-/i.test(body.error)) return "rejected" as const;
+    if (typeof body.error === "string" && /min relay fee|mempool min fee|insufficient fee|inputs-missingorspent|mandatory-script-verify-flag-failed|bad-txns-/i.test(body.error)) {
+      // Spent inputs are also what a retry of this transaction reports once it is mined.
+      if (!/inputs-missingorspent/i.test(body.error)) return "rejected" as const;
+      try {
+        const tx = await request<{ txid: string; confirmations: number }>(p.network, `/api/v2/tx/${p.txid}`);
+        return tx?.txid === p.txid ? "submitted" as const : "unknown" as const;
+      } catch (e) {
+        if (e instanceof ChainError && /transaction not found|tx not found/i.test(e.message)) return "rejected" as const;
+      }
+    }
   } catch { /* Ambiguous transport outcome: keep the original transaction. */ }
   return "unknown" as const;
 }
+let queue: Promise<unknown> = Promise.resolve();
+function enqueue<T>(work: () => Promise<T>): Promise<T> {
+  const result = queue.then(work);
+  queue = result.catch(() => {});
+  return result;
+}
 async function handle(m: Message, epoch: number) {
   if (m.command === "account-state" || m.command === "contact-link") return accountState();
-  if (m.command === "account-login") { await loginAccount(m.importLocal === true); return syncContacts(() => {}); }
+  // Signing in waits on the browser's sign-in window outside the queue; its contact sync must not
+  // interleave with contact-save/remove, which write the same list.
+  if (m.command === "account-login") { await loginAccount(m.importLocal === true); return enqueue(() => syncContacts(() => {})); }
   if (m.command === "account-logout" || m.command === "contact-disconnect") return logoutAccount();
   const stillActive = () => assertEpoch(epoch);
   stillActive();
@@ -278,14 +301,12 @@ async function handle(m: Message, epoch: number) {
 }
 // Only our packaged wallet page can invoke the signing interface. No web-page
 // provider, content script, externally_connectable route or arbitrary URL relay.
-let queue: Promise<unknown> = Promise.resolve();
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (sender.id !== chrome.runtime.id || sender.url?.split("?")[0].split("#")[0] !== chrome.runtime.getURL("index.html") || !message || typeof message.command !== "string") return false;
   if (message.command === "lock") { lock().then((data) => reply({ ok: true, data }), () => reply({ ok: false, error: "锁定失败。" })); return true; }
   const epoch = lockEpoch;
   const independent = ["account-login", "account-state", "contact-link"].includes(message.command);
-  const work = independent ? handle(message, epoch) : queue.then(() => handle(message, epoch));
-  if (!independent) queue = work.catch(() => {});
+  const work = independent ? handle(message, epoch) : enqueue(() => handle(message, epoch));
   work.then((data) => reply({ ok: true, data }), (error) => reply({ ok: false, error: error instanceof Error ? error.message : "操作失败。" }));
   return true;
 });

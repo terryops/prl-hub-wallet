@@ -1,4 +1,4 @@
-import { normalizeConfig, mergeItems, configOf, defaults } from "../shared/store.ts";
+import { normalizeConfig, mergeItems, configOf, defaults, sameConfig } from "../shared/store.ts";
 import { accountAPI, accountState, accountGuard, saveAccountContacts, saveAccountPro, CONTACT_LINK } from "./account.ts";
 import { CONTACTS, type Contact } from "./contacts.ts";
 import { isAddress } from "./wallet.ts";
@@ -59,7 +59,8 @@ export async function syncContacts(active: () => void) {
     const config = { ...remote, contacts };
     const data = configOf({ ...defaults(), ...config }); await stillActive();
     if (new TextEncoder().encode(JSON.stringify(data)).length > 65536) throw new Error("同步配置无效。");
-    try { await accountAPI("/v1/account/config", "PUT", { schema_version: 1, rev: server.rev, data }, userId); }
+    // An identical upload would only bump the revision and make other devices retry on 409.
+    if (!server.data || !sameConfig(data, remote)) try { await accountAPI("/v1/account/config", "PUT", { schema_version: 1, rev: server.rev, data }, userId); }
     catch (e) {
       if ((e as Error).message === "sync_requires_pro") { await saveAccountPro(userId, false); return accountState(); }
       if ((e as { status?: number }).status === 409 && attempt < 2) continue;

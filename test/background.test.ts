@@ -299,3 +299,81 @@ test('manual checks cannot release reservations using malformed confirmation dat
     }
   } finally { globalThis.fetch = original; }
 });
+test('retrying a transaction that was already mined reports it submitted, not rejected', async () => {
+  const original = fetch, p = data.pending[0];
+  try {
+    for (const [lookup, expected] of [['mined', 'submitted'], ['missing', 'rejected'], ['offline', 'unknown']] as const) {
+      await reset({ ...data, pending: [{ ...p, inputs: ['aa'.repeat(32) + ':0'] }] });
+      globalThis.fetch = async url => {
+        const path = new URL(String(url)).pathname;
+        if (path.includes('/sendtx/')) return Response.json({ error: 'bad-txns-inputs-missingorspent' }, { status: 400 });
+        if (path.includes('/tx/')) {
+          if (lookup === 'offline') throw new Error('offline');
+          return lookup === 'mined' ? Response.json({ txid: p.txid, confirmations: 1 }) : Response.json({ error: 'Transaction not found' }, { status: 404 });
+        }
+        throw new Error('unexpected request ' + path);
+      };
+      const retry = await rpc('retry', { txid: p.txid, password });
+      assert.equal(retry.ok, true, retry.error); assert.equal(retry.data.pending[0].status, expected, lookup);
+    }
+  } finally { globalThis.fetch = original; }
+});
+test('a first-page refresh keeps history pages loaded with load-more unless it would leave a gap', async () => {
+  await reset({ ...data, pending: [] }); const original = fetch;
+  const tx = (n: number, confirmations = 3) => ({ txid: n.toString(16).padStart(64, '0'), blockTime: 1000 + n, confirmations });
+  let pages: ReturnType<typeof tx>[][] = [[tx(30, 0), tx(29), tx(28)], [tx(20), tx(19)]];
+  globalThis.fetch = async url => {
+    const u = new URL(String(url));
+    if (u.pathname.includes('/utxo/')) return Response.json([]);
+    if (u.pathname.includes('/address/') || u.searchParams.get('filter') === 'inputs') return Response.json({ balance: '0', transactions: [], totalPages: 1 });
+    const page = Number(u.searchParams.get('page'));
+    return Response.json({ balance: '0', page, totalPages: pages.length, transactions: pages[page - 1] || [] });
+  };
+  const ids = (r: any) => r.data.snapshot.history.map((h: any) => parseInt(h.txid, 16));
+  try {
+    assert.deepEqual(ids(await rpc('refresh')), [30, 29, 28]);
+    const more = await rpc('refresh', { page: 2 });
+    assert.deepEqual(ids(more), [30, 29, 28, 20, 19]); assert.equal(more.data.snapshot.hasMore, false);
+    // The unconfirmed transaction left the mempool and a new one arrived.
+    pages = [[tx(31), tx(29), tx(28)], [tx(20), tx(19)]];
+    const kept = await rpc('refresh');
+    assert.deepEqual(ids(kept), [31, 29, 28, 20, 19]); assert.equal(kept.data.snapshot.page, 2); assert.equal(kept.data.snapshot.hasMore, false);
+    // A whole new first page: older pages may now hide unseen transactions, so start over.
+    pages = [[tx(42), tx(41), tx(40)], [tx(39), tx(31)], [tx(29), tx(28)]];
+    const reset1 = await rpc('refresh');
+    assert.deepEqual(ids(reset1), [42, 41, 40]); assert.equal(reset1.data.snapshot.page, 1); assert.equal(reset1.data.snapshot.hasMore, true);
+  } finally { globalThis.fetch = original; }
+});
+test('contact sync after sign-in waits for a contact save instead of overwriting it', async () => {
+  await reset({ ...data, pending: [] }); await local.remove('wallet.contacts');
+  const original = fetch, originalGet = local.get, redirect = 'https://test.chromiumapp.org/account';
+  Object.assign(chromeMock, { identity: { getRedirectURL: () => redirect, launchWebAuthFlow: async ({ url }: { url: string }) => redirect + '?code=' + 'C'.repeat(43) + '&state=' + new URL(url).searchParams.get('state') } });
+  globalThis.fetch = async (url, init) => {
+    const path = new URL(String(url)).pathname;
+    if (path.endsWith('/exchange')) return Response.json({ user_id: 'u_login-race', device_id: 'd', access_token: 'A'.repeat(43), refresh_token: 'B'.repeat(43), expires_in: 900 });
+    if (path.endsWith('/v1/account')) return Response.json({ email: 'race@example.com', pro: true });
+    if (path.endsWith('/v1/account/config')) return Response.json(init?.method === 'PUT' ? {} : { schema_version: 1, rev: 0, data: null });
+    if (path.endsWith('/logout')) return Response.json({ ok: true });
+    throw new Error('unexpected request ' + path);
+  };
+  // Pause the sync right after it has checked that the local list is unchanged, before it writes.
+  let contactReads = 0, paused = false, reached!: () => void, release!: () => void;
+  const started = new Promise<void>(resolve => reached = resolve), barrier = new Promise<void>(resolve => release = resolve);
+  local.get = async (keys?: string | string[] | null) => {
+    if (keys === 'wallet.contacts') contactReads++;
+    else if (contactReads === 3 && !paused) { paused = true; reached(); await barrier; }
+    return originalGet(keys);
+  };
+  try {
+    const login = rpc('account-login', { importLocal: true });
+    await started;
+    const save = rpc('contact-save', { name: 'Saved during sync', address: vectors.addresses[2], note: '' });
+    await new Promise(resolve => setTimeout(resolve, 20)); release();
+    assert.equal((await login).ok, true); assert.equal((await save).ok, true);
+    const contacts = (await originalGet('wallet.contacts'))['wallet.contacts'] as { name: string }[];
+    assert.deepEqual(contacts.map(c => c.name), ['Saved during sync']);
+  } finally {
+    release(); local.get = originalGet;
+    await rpc('account-logout'); globalThis.fetch = original;
+  }
+});

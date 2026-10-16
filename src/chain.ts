@@ -133,7 +133,8 @@ export async function loadAccount(publicKey: string, network: Network, walletId:
     pending: utxos.filter((u) => !u.confirmations).reduce((s, u) => s + BigInt(u.value), 0n).toString(),
     history: [...allTxs.values()].map((tx) => { const peer = transactionPeer(tx, historyMine); return { txid: tx.txid, time: tx.blockTime || 0, confirmations: tx.confirmations || 0, delta: (ownValue(tx.vout || []) - ownValue(tx.vin || [])).toString(), amount: (peer.sent ? (tx.vout || []).filter((io) => !(io.addresses || []).some((a) => historyMine.has(a.toLowerCase()))).reduce((n, io) => n + BigInt(io.value || "0"), 0n) : ownValue(tx.vout || [])).toString(), fee: tx.fees || "0", ...peer }; }).sort((a, b) => b.time - a.time),
     page, hasMore: page < (first.totalPages || 1), changeAddresses: [...changes], addressPaths: Object.fromEntries([...mine].filter(([a, d]) => d.index >= 200 && (changes.has(a) || utxos.some((u) => u.address === a))).map(([a, d]) => [a, `${accountPath(network)}/${d.branch}/${d.index}`])),
-    scanHeight: Math.max(options.fromHeight || 0, ...spent.filter((tx) => (tx.confirmations || 0) > 0).map((tx) => tx.blockHeight || 0)), time: Date.now()
+    // reduce, not Math.max(...spent): a full scan can return more transactions than a call accepts as arguments.
+    scanHeight: spent.reduce((height, tx) => (tx.confirmations || 0) > 0 ? Math.max(height, tx.blockHeight || 0) : height, options.fromHeight || 0), time: Date.now()
   };
 }
 export async function estimateFee(network: Network) {

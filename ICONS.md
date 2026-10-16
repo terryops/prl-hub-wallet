@@ -39,6 +39,7 @@ and `options` (`options-outline.svg`). The extension ships the license as
 | `send` | `paper-plane-outline.svg` |
 | `history` | `time-outline.svg` |
 | `plus` | `add-outline.svg` |
+| `minus` | `remove-outline.svg` |
 | `more` | `ellipsis-horizontal.svg` |
 | `copy` | `copy-outline.svg` |
 | `external` | `open-outline.svg` |
