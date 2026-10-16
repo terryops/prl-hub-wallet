@@ -8,6 +8,8 @@ export type Monitor = Item & {
   label: string;
   alert: boolean;
   after: number;
+  /// Seconds after the offline push to remind once more if still offline; absent or 0 = never.
+  again?: number;
   paused?: boolean;
 };
 export type Wallet = Item & { addr: string; label: string };
@@ -197,6 +199,8 @@ export type Order = {
 export type Availability = {
   pay: { enabled: boolean; usd: number };
   vapid_key: string | null;
+  // Android: the server can deliver through Firebase Cloud Messaging (BRIDGE.md in the prl-hub-android repository).
+  fcm?: boolean;
   auth?: { enabled: boolean; site_key: string | null };
 };
 export type Me = Availability & {

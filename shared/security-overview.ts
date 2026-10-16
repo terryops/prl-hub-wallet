@@ -7,7 +7,7 @@ import type { Lang } from "./types.ts";
 // 设置 → 安全性说明 (prl-hub Sources/Settings/SecurityInfoView.swift). Same sections and
 // wording where the facts match; each platform states only what its own code does.
 // Keep in step with site/privacy.html, web/public/_headers (CSP), the extension manifest
-// and the requests in api.ts, main.tsx, extension/src/background.ts and account.ts.
+// and the requests in api.ts, main.tsx, account.ts and the wallet's src/background.ts.
 export type SecurityCopy = typeof localized.en;
 type Text = keyof SecurityCopy;
 export type SecurityRow = { icon: IconName; title: Text; text: Text };

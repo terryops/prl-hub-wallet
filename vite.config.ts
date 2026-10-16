@@ -1,9 +1,10 @@
 import { defineConfig } from "vite";
 export default defineConfig({
   base: "./",
-  // One React for every file. In the combined private source, shared/ is ../web/src with
-  // its own node_modules; deduping keeps that build identical to this one.
+  // One React for every file, shared/ included.
   resolve: { dedupe: ["react", "react-dom"] },
+  // Android-only branches (__PEARL_ANDROID__) fold away; vite.android.config.ts sets it to true.
+  define: { __PEARL_ANDROID__: "false" },
   build: {
     rollupOptions: {
       input: { wallet: "index.html", background: "src/background.ts" },

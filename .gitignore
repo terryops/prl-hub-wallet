@@ -2,5 +2,7 @@ node_modules/
 dist/
 *.zip
 out/
+.baseline-language-hashes.json
+dist-android/
 .DS_Store
 *.log

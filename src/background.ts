@@ -5,6 +5,10 @@ import { CONTACTS, saveContact, removeContact } from "./contacts.ts";
 import { DONATION_ADDRESS, canDonate, donationAmount } from "./donation.ts";
 import { CONTACT_LINK, syncContacts } from "./contact-sync.ts";
 import { accountState, loginAccount, logoutAccount } from "./account.ts";
+import { nativePost } from "./android/native.ts";
+// Defined per module (not imported) so the Chrome build folds it even across shared chunks.
+declare const __PEARL_ANDROID__: boolean | undefined;
+const ANDROID = typeof __PEARL_ANDROID__ !== "undefined" && __PEARL_ANDROID__ === true;
 const VAULT = "pearl.wallet.v1", SESSION = "wallet.session", REVIEW = "wallet.review", SNAPSHOT = "wallet.snapshot", LOCK_MS = 5 * 60000;
 let lockEpoch = 0;
 const assertEpoch = (epoch: number) => {
@@ -108,7 +112,8 @@ async function broadcast(p: Pending) {
   // Persisted before POST. A lost reply leaves this exact transaction available for
   // checking/retry and keeps its inputs reserved; never build a replacement silently.
   try {
-    const response = await fetch(origin(p.network) + "/api/v2/sendtx/", { method: "POST", body: p.hex, headers: { "Content-Type": "text/plain" }, credentials: "omit", redirect: "error", signal: AbortSignal.timeout(25000) });
+    const response = ANDROID ? await nativePost(origin(p.network) + "/api/v2/sendtx/", p.hex, "text/plain")
+      : await fetch(origin(p.network) + "/api/v2/sendtx/", { method: "POST", body: p.hex, headers: { "Content-Type": "text/plain" }, credentials: "omit", redirect: "error", signal: AbortSignal.timeout(25000) });
     const body = await response.json();
     if (response.ok && body.result === p.txid || typeof body.error === "string" && /already.*(known|block chain|mempool)/i.test(body.error)) return "submitted" as const;
     if (typeof body.error === "string" && /min relay fee|mempool min fee|insufficient fee|inputs-missingorspent|mandatory-script-verify-flag-failed|bad-txns-/i.test(body.error)) {
@@ -180,6 +185,8 @@ async function handle(m: Message, epoch: number) {
       (m.expectedNetwork !== undefined && m.expectedNetwork !== data.network))
     throw new Error("钱包或网络已切换，请重新操作。");
   if (m.command === "contact-sync") return syncContacts(stillActive);
+  // Android home-screen widget: the public key and change addresses it refreshes the balance from.
+  if (ANDROID && m.command === "widget-keys") return { xpub: xpub(w.mnemonic, data.network), changeAddresses: w.changeAddresses?.[data.network] || [] };
   if (m.command === "contact-save" || m.command === "contact-remove") {
     const raw = (await chrome.storage.local.get(CONTACTS))[CONTACTS];
     const contacts = m.command === "contact-save"

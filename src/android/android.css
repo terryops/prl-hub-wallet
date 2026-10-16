@@ -1,0 +1,41 @@
+/* The Android app's wallet follows the app's own light/dark choice and palette (entry.ts sets
+   data-theme and data-palette from the app), so these restate tokens.css and the hero colours
+   per appearance instead of relying on prefers-color-scheme alone. Values match tokens.css,
+   style.css and the website's Modern Silver palette (web/src/style.css). */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --page-bg: #f4f6fc; --surface: #fff; --soft: #f1f4fb; --line: #e6eaf3; --muted: #667088; --text: #24314d;
+  --blue: #5478ed; --blue-text: #355fea; --blue-strong: #466dec; --green: #1f7e67; --red: #cb3660; --warn: #906b17;
+  --hover: #e8edfc; --selected: #e8eefe; --on-blue: #fff; --warning-bg: #fff6d9; --warning-line: #efd998;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page-bg: #101724; --surface: #182132; --soft: #202c41; --line: #2c374c; --muted: #95a2ba; --text: #e4eaf7;
+  --blue: #8faaff; --blue-text: var(--blue); --blue-strong: var(--blue); --green: #6ad4ac; --red: #ff83a5; --warn: #e9c96e;
+  --hover: #293956; --selected: #26395f; --on-blue: #101724; --warning-bg: #393224; --warning-line: #665434;
+}
+:root[data-theme="light"] .balance-card, :root[data-theme="light"] .balance-actions {
+  --hero-text: #21384f; --hero-secondary: #536c87; --hero-price: #355f93; --hero-chip: rgb(255 255 255 / .9);
+  --hero-edge: rgb(218 230 242 / .75); --hero-gradient: linear-gradient(135deg, #fcfeff, #f0f8fb, #e4effb);
+  --action-surface: #fff; --action-edge: rgb(224 231 240 / .75); --action-glyph: #4372ae; --action-badge: linear-gradient(135deg, #f0f6fd, #eaf2fc);
+}
+:root[data-theme="light"] .balance-card { box-shadow: 0 5px 20px rgb(90 114 141 / .08); }
+:root[data-theme="dark"] .balance-card, :root[data-theme="dark"] .balance-actions {
+  --hero-text: #f3f7fc; --hero-secondary: #bcd0e5; --hero-price: #d4e5f7; --hero-chip: rgb(215 220 227 / .1);
+  --hero-edge: rgb(81 86 94 / .7); --hero-gradient: linear-gradient(135deg, #2c2f35, #292c31, #26282e);
+  --action-surface: #24262b; --action-edge: rgb(67 71 78 / .7); --action-glyph: #b5cfee; --action-badge: linear-gradient(135deg, #30343c, #2c3037);
+}
+:root[data-theme="dark"] .balance-card { box-shadow: 0 5px 20px rgb(20 20 22 / .08); }
+:root[data-palette="mono"] {
+  --page-bg: #fafbfd; --surface: #fff; --soft: #f3f6fa; --line: #e5ebf2; --text: #1d2129; --muted: #636b78;
+  --blue: #3f6eba; --blue-text: #3f6eba; --blue-strong: #386bd3; --on-blue: #fff; --hover: #eef2f7; --selected: #e8eff9;
+}
+:root[data-palette="mono"][data-theme="dark"] {
+  --page-bg: #18191d; --surface: #24262b; --soft: #2c2f35; --line: #3a3d44; --text: #f3f5f8; --muted: #a3a8b2;
+  --blue: #adc8ef; --blue-text: #adc8ef; --blue-strong: #416ed0; --on-blue: #fff; --hover: #30333a; --selected: #31363f;
+}
+
+/* In the app the wallet fills its tab; the confirmation replaces the password fields. */
+.android-confirm { display: flex; gap: 8px; align-items: center; margin: 4px 0 12px; color: var(--muted); font-size: var(--font-13); line-height: 1.5; }
+.android-confirm .icon { flex: none; width: 18px; height: 18px; color: var(--blue-text); }
+.android-lock-help { display: grid; gap: 8px; }

@@ -16,11 +16,11 @@ The MIT copyright and full license are retained in
 `public/licenses/ionicons.txt`, which is copied into every production build.
 Apple SF Symbols exports are not added to the Web bundle.
 
-The browser wallet (`extension/`) uses the same drawings: `extension/src/icon-symbols.tsx`
+The browser wallet (prl-hub-wallet) uses the same drawings: its `src/icon-symbols.tsx`
 spreads this table and adds four wallet-only shapes from the same package, `create`
 (`add-circle-outline.svg`), `restore` (`download-outline.svg`), `backup` (`key-outline.svg`)
 and `options` (`options-outline.svg`). The extension ships the license as
-`extension/public/licenses/ionicons.txt`; it contains no SF Symbols either.
+`public/licenses/ionicons.txt`; it contains no SF Symbols either.
 
 | Interface name | Ionicons source |
 | --- | --- |

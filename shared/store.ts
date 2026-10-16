@@ -13,6 +13,7 @@ import { currencies } from "./currency.ts";
 import { fleetDefaults, normalizeFleet, normalizeDevice } from "./fleet.ts";
 import { browserLanguage, langs } from "./preferences.ts";
 import { localPurchase } from "./purchase-key.ts";
+import { ALERT_AFTER, ALERT_AGAIN } from "./monitors.ts";
 export { langs } from "./preferences.ts";
 export const KEY = "prl.web.v1";
 export const pools = [
@@ -43,7 +44,8 @@ const monitorOK = (o: Monitor) =>
     (pools.includes(o.pool) &&
       labelOK(o.label) &&
       typeof o.alert === "boolean" &&
-      [600, 900, 1800, 3600].includes(o.after) &&
+      ALERT_AFTER.includes(o.after) &&
+      (o.again == null || o.again === 0 || ALERT_AGAIN.includes(o.again)) &&
       (o.pool === "F2Pool"
         ? /^[0-9a-f]{16,64}$/.test(o.addr) &&
           (o.acct == null ||
@@ -205,7 +207,7 @@ export const configOf = (state: State): Config => {
   return {
     lang: state.lang, settingsUpdated: state.settingsUpdated, autoRefresh: state.autoRefresh,
     window: state.window ? pick(state.window, ["start", "end", "tz"]) : null,
-    monitors: items(state.monitors, ["pool", "addr", "acct", "label", "alert", "after", "paused"]),
+    monitors: items(state.monitors, ["pool", "addr", "acct", "label", "alert", "after", "again", "paused"]),
     wallets: items(state.wallets, ["addr", "label"]),
     rules: items(state.rules, ["kind", "value", "window", "enabled", "seen_fired", "repeat"]),
     contacts: items(state.contacts || [], ["name", "address", "note"]),

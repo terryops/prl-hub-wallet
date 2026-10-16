@@ -4,8 +4,10 @@ A self-custody browser wallet for Pearl (PRL), for Chrome and Edge: create or re
 wallets, view balances and history, receive, and sign and send PRL on your own device.
 It opens in the browser side panel or as a full page and supports 16 interface languages.
 
-This repository is the wallet's complete source. The packages Pearl Hub publishes
-(version 0.1.2 and later) are built from it; see [Verify a package](#verify-a-package).
+This repository is the wallet's complete source, and where it is developed. The packages
+Pearl Hub publishes (version 0.1.2 and later) are built from it; see
+[Verify a package](#verify-a-package). Development notes, in Chinese, are in
+[DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## Security model
 
@@ -54,6 +56,11 @@ turn on Developer mode, choose **Load unpacked** and select `dist/`.
 
 Both replace `icon.png` with `store/icon-128.png`; otherwise they contain `dist/` as built.
 
+`npm run build:android` builds the wallet page that the Pearl Hub Android app bundles
+(`dist-android/`). The browser checks (`npm run qa`, `qa:features`, `qa:languages`,
+`store:screenshots`) load `dist/` into Chromium with Playwright and use local fixtures only;
+install the browser once with `npx playwright install chromium`.
+
 ## Verify a package
 
 Check out the tag for the version you want, run `npm ci && npm run package`, unzip
@@ -67,14 +74,23 @@ manifest fields the store adds (such as `_metadata/` and `update_url`).
 - `src/`: the wallet page (`main.tsx`), the background service worker
   (`background.ts`), password encryption (`vault.ts`), key derivation and signing
   (`wallet.ts`, `chain.ts`), contacts, account sign-in and contact sync, and 16 languages.
-- `shared/`: files shared with the Pearl Hub Web frontend
+- `src/android/`: the wallet inside the Pearl Hub Android app, one page on a `chrome.*`
+  shim (`android.html`, `vite.android.config.ts`).
+- `shared/`: copies of files from the Pearl Hub Web frontend
   ([prl-hub-web](https://github.com/terryops/prl-hub-web), `src/`): the security and
-  account copy, the configuration model used for contact sync and the icon table.
+  account copy, the configuration model used for contact sync, the icon table and the
+  Android bridge. That is their source; `npm run sync:shared` copies them again from a
+  `prl-hub-web` checkout next to this one (or `npm run sync:shared -- <its src path>`),
+  and `-- --check` only lists the differences.
 - `public/`: the manifest, localized store name and description, icon, Ionicons
   license and the bundled privacy notice.
-- `store/`: the Chrome Web Store listing text in 16 languages and the 128 px icon.
-- `test/`: unit tests. `native-vectors.json` holds public test vectors from the native
-  app (the standard BIP39 test phrase); no test uses real funds.
+- `store/`: the Chrome Web Store listing text in 16 languages, the 128 px icon, promo
+  image and screenshots, and the submission notes (`SUBMIT.md`, in Chinese).
+- `scripts/`: `store-release.mjs` uploads a store package and submits it for review
+  through the Chrome Web Store API; `sync-shared.mjs` refreshes `shared/`.
+- `test/`: unit tests (`*.test.ts`) and the browser checks (`*.mjs`). `native-vectors.json`
+  holds public test vectors from the native app (the standard BIP39 test phrase);
+  `native-verify.go` is an optional consensus check of signed fixtures. No test uses real funds.
 - `ICONS.md`: Ionicons provenance and the icon mapping.
 
 ## License

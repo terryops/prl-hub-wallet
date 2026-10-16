@@ -3,6 +3,10 @@ export const targetKey = (m: Monitor) => JSON.stringify([m.pool, m.addr, m.acct 
 export const duplicateMonitor = (items: Monitor[], pool: string, addr: string, id?: string) => items.some((m) => !m.deleted && m.id !== id && m.pool === pool && m.addr.toLowerCase() === addr.toLowerCase());
 export const enabledMonitors = (items: Monitor[]) => items.filter((m) => !m.deleted && !m.paused);
 export const alertMonitors = (items: Monitor[]) => enabledMonitors(items).filter((m) => m.alert);
+/// 掉线提醒 (seconds): how long a worker is offline before the push, and the one reminder
+/// after that push if it is still offline (0 = none) — the worker's AFTER and AGAIN (alerts/src/watch.js).
+export const ALERT_AFTER = [600, 900, 1800, 3600, 5400, 7200];
+export const ALERT_AGAIN = [1800, 3600, 7200, 14400];
 export const ownAddresses = (items: Monitor[]) => [...new Set(enabledMonitors(items).filter((m) => m.pool !== "F2Pool").map((m) => m.addr))];
 export const cleanAddress = (raw: string) => raw.trim().split(/\s+/)[0].toLowerCase();
 export function moveIds(ids: string[], id: string, destination: number) {
