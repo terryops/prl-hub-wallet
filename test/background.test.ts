@@ -72,7 +72,7 @@ test('donation preview fixes recipient, enforces minimum/mainnet and uses existi
     assert.equal(broadcasts, 0);
     assert.equal((await rpc('send', {id:review.data.id,password:'wrong-password'})).ok, false); assert.equal(broadcasts, 0);
     const sent = await rpc('send', {id:review.data.id,password});
-    assert.equal(sent.ok, true); assert.equal(sent.data.outcome, 'unknown'); assert.equal(broadcasts, 1);
+    assert.equal(sent.ok, true); assert.equal(sent.data.outcome, 'unknown'); assert.equal(broadcasts, 2, 'one to each mainnet indexer');
     assert.equal(sent.data.pending[0].to, DONATION_ADDRESS);
     await rpc('network', {network:'testnet'});
     assert.equal((await rpc('prepare', {donation:true,amount:'5',fee:50000})).ok, false);
@@ -214,7 +214,7 @@ test('refresh can confirm an older pending transaction outside the current histo
     return Response.json(path.includes('/utxo/') ? [] : { balance: '0', transactions: [] });
   };
   try {
-    assert.equal((await rpc('refresh')).data.pending.length, 0); assert.equal(checks, 1);
+    assert.equal((await rpc('refresh')).data.pending.length, 0); assert.equal(checks, 2, 'both indexers are asked');
     assert.equal((await rpc('delete', { name: 'A', password })).ok, true);
   } finally { globalThis.fetch = original; }
 });
@@ -418,7 +418,7 @@ test('rebroadcast resends the indexer\'s copy of an unconfirmed transaction and 
       const r = await rpc('tx-rebroadcast', { txid: tx.txid });
       assert.equal(r.ok, true, r.error); assert.deepEqual(r.data, expected);
     }
-    assert.equal(posted.length, 6); assert.ok(posted.every((body) => body === tx.hex));
+    assert.equal(posted.length, 12, 'each attempt goes to both indexers'); assert.ok(posted.every((body) => body === tx.hex));
     posted.length = 0;
     globalThis.fetch = serve(() => Response.json({ result: tx.txid }), { ...tx, confirmations: 3, blockHeight: 130692 });
     assert.deepEqual((await rpc('tx-rebroadcast', { txid: tx.txid })).data, { outcome: 'known' });
@@ -441,5 +441,87 @@ test('the indexer\'s real not-found answer keeps a manual check inconclusive and
     await reset();
     globalThis.fetch = async () => Response.json({ error: `already have transaction ${p.txid}` }, { status: 400 });
     assert.equal((await rpc('retry', { txid: p.txid, password })).data.pending[0].status, 'submitted', 'the Pearl node already has it');
+  } finally { globalThis.fetch = original; }
+});
+// Two mainnet indexers: Pearl Hub's own (pearlhub.net/node) and the official one.
+const perIndexer = (answer: (own: boolean, path: string) => Response | Promise<Response>) => (async (url: string | URL | Request) => {
+  const u = new URL(String(url)), own = u.hostname === 'pearlhub.net';
+  return answer(own, (own ? u.pathname.replace(/^\/node\//, '/') : u.pathname) + u.search);
+}) as typeof fetch;
+test('a broadcast is sent when either node takes it, and refused only when every node that saw it refused it', async () => {
+  const original = fetch, p = data.pending[0];
+  const ok = () => Response.json({ result: p.txid }), refused = () => Response.json({ error: '-26: min relay fee not met' }, { status: 400 });
+  const lost = () => { throw new Error('reply lost'); }, limited = () => Response.json({ error: 'rate limited' }, { status: 429 });
+  const known = () => Response.json({ error: `already have transaction ${p.txid}` }, { status: 400 });
+  try {
+    for (const [own, official, expected] of [
+      [ok, lost, 'submitted'], [lost, ok, 'submitted'], [known, refused, 'submitted'],
+      [refused, refused, 'rejected'], [limited, refused, 'rejected'],
+      [refused, lost, 'unknown'], [limited, limited, 'unknown'], [lost, lost, 'unknown'],
+    ] as const) {
+      await reset();
+      globalThis.fetch = perIndexer((isOwn, path) => path.includes('/sendtx/') ? (isOwn ? own : official)() : Response.json({ balance: '0', transactions: [] }));
+      const retry = await rpc('retry', { txid: p.txid, password });
+      assert.equal(retry.ok, true, retry.error); assert.equal(retry.data.pending[0].status, expected, `${own.name} + ${official.name}`);
+    }
+  } finally { globalThis.fetch = original; }
+});
+test('pending checks ask both indexers: the copy furthest along counts, and not found needs both to say so', async () => {
+  const original = fetch, p = data.pending[0];
+  const tx = (confirmations: number) => () => Response.json({ txid: p.txid, confirmations });
+  const missing = () => Response.json({ error: `Transaction '${p.txid}' not found` }, { status: 400 }), down = () => Response.json({ error: 'node unhealthy' }, { status: 503 });
+  try {
+    for (const [own, official, expected] of [
+      // On 2026-10-20 the official indexer kept a mined transaction unconfirmed for hours.
+      [tx(3), tx(0), 'confirmed'], [missing, tx(1), 'confirmed'], [tx(0), missing, 'submitted'],
+      [missing, missing, 'unknown'], [down, missing, 'error'], [down, down, 'error'],
+    ] as const) {
+      await reset();
+      globalThis.fetch = perIndexer((isOwn, path) => path.includes('/tx/') ? (isOwn ? own : official)() : Response.json({ balance: '0', transactions: [] }));
+      const checked = await rpc('check', { txid: p.txid });
+      if (expected === 'error') { assert.equal(checked.ok, false); assert.deepEqual((await passwordVault()).pending, data.pending); continue; }
+      assert.equal(checked.ok, true, checked.error);
+      assert.deepEqual(checked.data.pending.map((x: any) => x.status), expected === 'confirmed' ? [] : [expected]);
+    }
+  } finally { globalThis.fetch = original; }
+});
+test('transaction details show the copy furthest along; not found when one index says so and none has it', async () => {
+  await reset(); const original = fetch, tx = txFixtures.normal;
+  const at = (confirmations: number) => () => Response.json({ ...tx, confirmations });
+  const missing = () => Response.json({ error: `Transaction '${tx.txid}' not found` }, { status: 400 }), down = () => Response.json({ error: 'node unhealthy' }, { status: 503 });
+  try {
+    for (const [own, official, expected] of [[at(2), at(0), 2], [at(1), at(1), 1], [missing, at(4), 4], [down, at(0), 0], [down, missing, 'missing'], [down, down, 'error']] as const) {
+      globalThis.fetch = perIndexer((isOwn) => (isOwn ? own : official)());
+      const r = await rpc('tx-detail', { txid: tx.txid });
+      if (expected === 'error') assert.equal(r.ok, false);
+      else if (expected === 'missing') assert.deepEqual(r.data, { found: false });
+      else { assert.equal(r.ok, true, r.error); assert.equal(r.data.tx.confirmations, expected); }
+    }
+  } finally { globalThis.fetch = original; }
+});
+test('加载更多 reads from the index page 1 came from, and a refresh from another index starts the pages over', async () => {
+  await reset({ ...data, pending: [] }); const original = fetch;
+  const page = (p: number, from: string) => ({ balance: '0', unconfirmedBalance: '0', page: p, totalPages: 3, transactions: [{ txid: String(p).repeat(64), blockTime: 100 - p, confirmations: 5, vin: [], vout: [{ addresses: [vectors.addresses[0]], value: '1' }] }], tokens: [], from });
+  const asked: string[] = [];
+  let ownUp = true;
+  globalThis.fetch = perIndexer((own, path) => {
+    asked.push(own ? 'own' : 'official');
+    if (own && !ownUp) return Response.json({ error: 'node unhealthy' }, { status: 503 });
+    if (path.includes('/utxo/')) return Response.json([]);
+    const p = Number(new URL('https://x' + path).searchParams.get('page') || 1);
+    return Response.json(page(p, own ? 'own' : 'official'));
+  });
+  try {
+    const first = await rpc('refresh'); assert.equal(first.ok, true, first.error);
+    assert.equal(first.data.snapshot.indexer, 'https://pearlhub.net/node');
+    ownUp = false; asked.length = 0;
+    // Our index went down after page 1: page 2 doesn't silently continue on the other index.
+    assert.equal((await rpc('refresh', { page: 2 })).ok, false); assert.ok(asked.every((x) => x === 'own'));
+    ownUp = true;
+    assert.equal((await rpc('refresh', { page: 2 })).data.snapshot.history.length, 2);
+    // Page 1 from the official index now: the pages loaded from ours are dropped.
+    ownUp = false;
+    const switched = await rpc('refresh'); assert.equal(switched.ok, true, switched.error);
+    assert.equal(switched.data.snapshot.indexer, 'https://blockbook.pearlresearch.ai'); assert.equal(switched.data.snapshot.history.length, 1);
   } finally { globalThis.fetch = original; }
 });

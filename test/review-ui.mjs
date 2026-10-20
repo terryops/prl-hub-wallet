@@ -114,14 +114,14 @@ try {
   await page.locator("dialog").getByRole("button", { name: "移除待确认记录", exact: true }).click();
   await page.waitForFunction(() => !document.querySelector("dialog[open]") && !document.querySelector(".pending"));
   assert.equal((await rpc("status")).data.pending.length, 0);
-  assert.equal(await worker.evaluate(() => fixture.broadcasts), 1);
+  assert.equal(await worker.evaluate(() => fixture.broadcasts), 2, "one post to each mainnet indexer");
   await button("↑ 转账").click(); await page.getByLabel("收款地址", { exact: true }).fill(vectors.cases[0].to);
   await page.getByLabel("转账金额", { exact: true }).fill("0.1"); await button("预览转账").click(); await button("确认并发送").waitFor();
   await page.getByLabel("再次输入密码确认", { exact: true }).fill("public-test-password"); await button("确认并发送").click();
   await page.getByRole("status").filter({ hasText: "节点拒绝了此交易" }).waitFor();
   assert.doesNotMatch(await page.getByRole("status").innerText(), /广播结果待核对/);
   assert.equal((await rpc("status")).data.pending[0].status, "rejected");
-  assert.equal(await worker.evaluate(() => fixture.broadcasts), 2);
+  assert.equal(await worker.evaluate(() => fixture.broadcasts), 4);
   console.log("PASS rejected broadcast has a distinct user-facing result and retains its pending record");
   assert.deepEqual(errors, []);
   console.log("PASS rejected transaction can be discarded with warning, password and acknowledgement");

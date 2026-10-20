@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { loadAccount, mergeUTXOs, transactionPeer, estimateFee, chooseFeePerKB, notFound, alreadyKnown, ChainError, request } from "../src/chain.ts";
+import { loadAccount, mergeUTXOs, transactionPeer, estimateFee, chooseFeePerKB, notFound, alreadyKnown, ChainError, request, requestFrom, indexers, origin, pinned, healthyFirst, resetIndexers, txCopies, NODE_KEY, BENCH_MS, KEY_REFUSED_BENCH_MS } from "../src/chain.ts";
 import { derived, planTransaction, signTransaction } from "../src/wallet.ts";
 const vectors = JSON.parse(readFileSync(new URL("./native-vectors.json", import.meta.url), "utf8"));
 test("counterparty uses largest external output, ignores change/self sends and shows receipt source", () => {
@@ -221,4 +221,117 @@ test("a full change scan over more spends than a call accepts as arguments still
   };
   try { assert.equal((await loadAccount(vectors.xpub, "mainnet", "test", [], 1, true)).scanHeight, pages * 100 + 98); }
   finally { globalThis.fetch = original; }
+});
+// Two mainnet indexers (see indexers() in src/chain.ts): Pearl Hub's own through its gateway, then the official one.
+const OWN = "https://pearlhub.net/node", OFFICIAL = "https://blockbook.pearlresearch.ai";
+/// A fetch that answers per indexer; records [indexer, path, key header] per request.
+function twoIndexers(answer: (own: boolean, path: string) => Response | Promise<Response>) {
+  const calls: [string, string, string | null][] = [];
+  const mock = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = new URL(String(input)), own = url.hostname === "pearlhub.net", path = own ? url.pathname.replace(/^\/node\//, "/") : url.pathname;
+    calls.push([own ? "own" : url.hostname === "blockbook.pearlresearch.ai" ? "official" : url.hostname, path, new Headers(init?.headers).get("x-pearl-hub-key")]);
+    return answer(own, path + url.search);
+  }) as typeof fetch;
+  return { mock, calls };
+}
+test("mainnet reads ask our own index first, with its key; the official one is the fallback; testnet only the official one", async () => {
+  const original = fetch; resetIndexers();
+  try {
+    const { mock, calls } = twoIndexers((own) => Response.json({ from: own ? "own" : "official" }));
+    globalThis.fetch = mock;
+    assert.deepEqual(indexers("mainnet"), [OWN, OFFICIAL]); assert.deepEqual(indexers("testnet"), ["https://blockbook.testnet.pearlresearch.ai"]);
+    assert.deepEqual(await requestFrom(indexers("mainnet"), "/api/v2/"), { data: { from: "own" }, base: OWN });
+    assert.deepEqual(calls, [["own", "/api/v2/", NODE_KEY]]);
+    calls.length = 0; await request("testnet", "/api/v2/");
+    assert.deepEqual(calls, [["blockbook.testnet.pearlresearch.ai", "/api/v2/", null]], "the key goes only to our gateway");
+    assert.equal(origin("mainnet"), OFFICIAL, "explorer links stay on the official explorer");
+  } finally { globalThis.fetch = original; resetIndexers(); }
+});
+test("a failing index is benched (503, 429, no answer, a website instead of JSON; a refused key for longer), a slow or not-found answer is not", async () => {
+  const original = fetch;
+  try {
+    for (const [failure, benchMs] of [
+      [() => Response.json({ error: "node unhealthy" }, { status: 503 }), BENCH_MS],
+      [() => Response.json({ error: "rate limited" }, { status: 429 }), BENCH_MS],
+      [() => { throw new TypeError("Failed to fetch"); }, BENCH_MS],
+      [() => new Response("<!doctype html><title>Pearl Hub</title>", { status: 200, headers: { "content-type": "text/html" } }), BENCH_MS],
+      [() => Response.json({ error: "unauthorized" }, { status: 401 }), KEY_REFUSED_BENCH_MS],
+      [() => { throw new DOMException("timed out", "TimeoutError"); }, null],
+      [() => Response.json({ error: `Transaction '${"ab".repeat(32)}' not found` }, { status: 400 }), null],
+    ] as const) {
+      resetIndexers();
+      const { mock, calls } = twoIndexers((own) => own ? failure() : Response.json({ from: "official" }));
+      globalThis.fetch = mock;
+      assert.deepEqual(await request("mainnet", "/api/v2/"), { from: "official" }, "falls back");
+      calls.length = 0; await request("mainnet", "/api/v2/");
+      // Benched: the official index is asked first until the bench ends; never dropped.
+      assert.deepEqual(calls.map((c) => c[0]), benchMs ? ["official"] : ["own", "official"], String(failure));
+      if (benchMs) {
+        const now = Date.now();
+        assert.deepEqual(healthyFirst([OWN, OFFICIAL], now + benchMs - 1000), [OFFICIAL, OWN]);
+        assert.deepEqual(healthyFirst([OWN, OFFICIAL], now + benchMs + 1000), [OWN, OFFICIAL]);
+      }
+    }
+    // Both failing: the last error is reported.
+    resetIndexers();
+    globalThis.fetch = twoIndexers(() => Response.json({ error: "down" }, { status: 502 })).mock;
+    await assert.rejects(request("mainnet", "/api/v2/"), (e) => e instanceof ChainError && e.status === 502);
+  } finally { globalThis.fetch = original; resetIndexers(); }
+});
+test("with a fallback left, the first index gets at most 12 seconds", async () => {
+  const original = fetch, timeout = AbortSignal.timeout, asked: number[] = []; resetIndexers();
+  AbortSignal.timeout = ((ms: number) => { asked.push(ms); return timeout.call(AbortSignal, ms); }) as typeof AbortSignal.timeout;
+  try {
+    globalThis.fetch = twoIndexers((own) => own ? Response.json({ error: "x" }, { status: 503 }) : Response.json({})).mock;
+    await request("mainnet", "/api/v2/");
+    assert.deepEqual(asked, [12000, 25000]);
+  } finally { AbortSignal.timeout = timeout; globalThis.fetch = original; resetIndexers(); }
+});
+test("one refresh reads from one index: the one that answered first, and a later failure there fails the refresh", async () => {
+  const original = fetch, account = { balance: "0", unconfirmedBalance: "0", page: 1, totalPages: 1, transactions: [], tokens: [] };
+  try {
+    // Ours answers: every read of the refresh goes to it.
+    resetIndexers();
+    let { mock, calls } = twoIndexers((_own, path) => Response.json(path.includes("/utxo/") ? [] : account));
+    globalThis.fetch = mock;
+    const ours = await loadAccount(vectors.xpub, "mainnet", "w", []);
+    assert.equal(ours.indexer, OWN); assert.ok(calls.length > 3); assert.ok(calls.every((c) => c[0] === "own"));
+    // Ours is down: the official one serves the whole refresh.
+    resetIndexers();
+    ({ mock, calls } = twoIndexers((own, path) => own ? Response.json({ error: "node unhealthy" }, { status: 503 }) : Response.json(path.includes("/utxo/") ? [] : account)));
+    globalThis.fetch = mock;
+    const official = await loadAccount(vectors.xpub, "mainnet", "w", []);
+    assert.equal(official.indexer, OFFICIAL); assert.deepEqual(calls.filter((c) => c[0] === "own").length, 1);
+    // Ours answers the first page, then fails: the refresh fails instead of finishing on the other index.
+    resetIndexers();
+    let first = true;
+    ({ mock, calls } = twoIndexers((own, path) => {
+      if (own && !first) return Response.json({ error: "node unhealthy" }, { status: 503 });
+      first = false;
+      return Response.json(path.includes("/utxo/") ? [] : account);
+    }));
+    globalThis.fetch = mock;
+    await assert.rejects(loadAccount(vectors.xpub, "mainnet", "w", []));
+    assert.ok(calls.every((c) => c[0] === "own"), "never mixed in the official index");
+    // A strict pin (加载更多) never leaves its index.
+    resetIndexers();
+    ({ mock, calls } = twoIndexers((own) => own ? Response.json({ error: "x" }, { status: 503 }) : Response.json(account)));
+    globalThis.fetch = mock;
+    await assert.rejects(loadAccount(vectors.xpub, "mainnet", "w", [], 2, false, { bases: pinned("mainnet", OWN, true) }));
+    assert.ok(calls.every((c) => c[0] === "own"));
+    assert.deepEqual(pinned("mainnet", OFFICIAL), [OFFICIAL, OWN]); assert.deepEqual(pinned("mainnet", "https://elsewhere.example"), [OWN, OFFICIAL]);
+  } finally { globalThis.fetch = original; resetIndexers(); }
+});
+test("the fee estimate prefers the index the balance came from, and every indexer is asked for a transaction", async () => {
+  const original = fetch; resetIndexers();
+  try {
+    const { mock, calls } = twoIndexers((own, path) => path.startsWith("/api/v2/tx/")
+      ? own ? Response.json({ error: `Transaction '${"ab".repeat(32)}' not found` }, { status: 400 }) : Response.json({ txid: "ab".repeat(32), confirmations: 0 })
+      : Response.json(path === "/api/v2/" ? { blockbook: { bestHeight: 0 } } : { result: own ? "0.0002" : "0.0001" }));
+    globalThis.fetch = mock;
+    assert.deepEqual(await estimateFee("mainnet", OFFICIAL), { fee: 10000, estimated: true });
+    assert.ok(calls.every((c) => c[0] === "official"));
+    assert.deepEqual(await estimateFee("mainnet"), { fee: 20000, estimated: true });
+    assert.deepEqual((await txCopies("mainnet", "ab".repeat(32))).map((c) => [c.base, c.state]), [[OWN, "missing"], [OFFICIAL, "found"]]);
+  } finally { globalThis.fetch = original; resetIndexers(); }
 });

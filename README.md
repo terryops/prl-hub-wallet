@@ -22,11 +22,13 @@ Pearl Hub publishes (version 0.1.2 and later) are built from it; see
 - There are no content scripts and no `externally_connectable`: web pages cannot reach
   the wallet or ask it to sign. The background worker accepts messages only from the
   extension's own page.
-- The content security policy allows connections to three sites only:
-  `blockbook.pearlresearch.ai` and `blockbook.testnet.pearlresearch.ai` (balances and
-  history, which receive the wallet's extended public key, and broadcasts of signed
-  transactions) and `pearlhub.net` (PRL price and exchange rates without any address
-  or identity, and the optional email account, which syncs contacts with Pearl Hub Pro).
+- The content security policy allows connections to three sites only. Balances, history
+  and broadcasts go first to Pearl Hub's own blockchain index at `pearlhub.net/node`, and
+  to Pearl's official `blockbook.pearlresearch.ai` when ours is unavailable or behind
+  (testnet: `blockbook.testnet.pearlresearch.ai` only). These queries receive the wallet's
+  extended public key; signed transactions are broadcast to both. `pearlhub.net` also
+  serves the PRL price and exchange rates (without any address or identity) and the
+  optional email account, which syncs contacts with Pearl Hub Pro.
 - Contacts are stored unencrypted in the extension's local storage.
 - Everything is bundled; no remote code is loaded. No ads, analytics or crash reporting.
 

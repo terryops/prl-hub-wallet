@@ -58,8 +58,11 @@ export async function fixtureWallet({ output = "out/features", viewport = { widt
     await worker.evaluate(({ address, testnet, to, language }) => {
       globalThis.fixture = { broadcasts: [], amount: "2500000000", offline: false };
       globalThis.fetch = async (url, init = {}) => {
-        const u = new URL(String(url)), p = u.pathname;
-        if (!/^https:\/\/blockbook\.(?:testnet\.)?pearlresearch\.ai$/.test(u.origin)) throw new Error("Unexpected fixture host");
+        // Mainnet asks Pearl Hub's own index (pearlhub.net/node, with its key) and the official one.
+        const u = new URL(String(url)), ownIndex = u.origin === "https://pearlhub.net" && u.pathname.startsWith("/node/"), p = ownIndex ? u.pathname.slice(5) : u.pathname;
+        if (!ownIndex && !/^https:\/\/blockbook\.(?:testnet\.)?pearlresearch\.ai$/.test(u.origin)) throw new Error("Unexpected fixture host");
+        if (ownIndex !== !!new Headers(init.headers).get("x-pearl-hub-key")) throw new Error("The index key goes to our own index only");
+        fixture.indexers = { ...fixture.indexers, [ownIndex ? "own" : "official"]: ((fixture.indexers || {})[ownIndex ? "own" : "official"] || 0) + 1 };
         if (fixture.offline) throw new Error("Fixture offline");
         if (p.includes("/sendtx/")) { fixture.broadcasts.push(init.body); throw new Error("Fixture broadcast response lost"); }
         if (p.includes("/estimatefee/")) return Response.json({ result: "0.0005" });
@@ -103,7 +106,7 @@ export async function accountFixture(worker, contacts = []) {
     };
     globalThis.fetch = async (url, init = {}) => {
       const u = new URL(String(url)), path = u.pathname;
-      if (u.origin !== "https://pearlhub.net") return chainFetch(url, init);
+      if (u.origin !== "https://pearlhub.net" || path.startsWith("/node/")) return chainFetch(url, init);
       if (init.credentials !== "omit" || init.redirect !== "error") throw new Error("Unsafe account fixture request");
       if (path === "/v1/auth/exchange") return Response.json({ user_id: "u_qa", device_id: "qa-device", access_token: "A".repeat(43), refresh_token: "B".repeat(43), expires_in: 900 });
       if (path === "/v1/auth/refresh") return Response.json({ error: "refresh_revoked" }, { status: 401 });

@@ -60,7 +60,7 @@ try {
   await closeDialog(); await button("支持开发者").click(); await page.getByLabel("自定义金额").fill("0.9"); await button("捐赠").click(); await page.getByRole("status").filter({ hasText: "最少 1 PRL" }).waitFor(); await closeDialog();
   // Complete the existing signing path against a worker fetch stub only.
   await button("支持开发者").click(); await button("10 PRL").click(); await button("确认捐赠").waitFor(); await page.getByLabel("再次输入密码确认", { exact: true }).fill("public-test-password"); await button("确认捐赠").click();
-  await page.locator(".pending").waitFor(); assert.equal(await worker.evaluate(() => fixture.broadcasts.length), 1);
+  await page.locator(".pending").waitFor(); assert.equal(await worker.evaluate(() => fixture.broadcasts.length), 2, "one post to each mainnet indexer");
   console.log("PASS B4 fixed two-line address, fee/total, no fiat, minimum and password/signing fixture path");
 
   for (const kind of ["workers", "wallet"]) {

@@ -64,9 +64,9 @@
 | `storage` | Locally stores encrypted wallets, encrypted pending transactions, public contacts and preferences; the trusted session holds the unlock key until lock. No Chrome account sync. |
 | `alarms` | Checks inactivity once per minute to enforce the 5-minute automatic lock. |
 | `sidePanel` | Opens the packaged wallet UI in the browser side panel when its toolbar icon is clicked. |
-| `https://blockbook.pearlresearch.ai/*` | Queries mainnet balances, public account/address history, UTXOs, fees and transaction status; broadcasts only explicitly confirmed locally signed transactions. |
+| `https://blockbook.pearlresearch.ai/*` | Fallback for mainnet balances, public account/address history, UTXOs, fees and transaction status when Pearl Hub's own index is unavailable or behind; transaction lookups and explicitly confirmed locally signed broadcasts go to both. |
 | `https://blockbook.testnet.pearlresearch.ai/*` | Same chain queries and explicitly confirmed broadcasts, restricted to testnet. |
-| `https://pearlhub.net/*` | Public market requests carry no wallet identity. Optional email account login and authenticated configuration sync share contact names, public addresses and notes. Account data is encrypted at rest and readable by the server; wallet seed phrases, private keys and passwords are never uploaded. |
+| `https://pearlhub.net/*` | Pearl Hub's own blockchain index at pearlhub.net/node is asked first for balances, address history, UTXOs, fees and transaction status (sending the wallet's public account key and addresses) and receives explicitly confirmed signed transactions. Public market requests carry no wallet identity. Optional email account login and authenticated configuration sync share contact names, public addresses and notes. Account data is encrypted at rest and readable by the server; wallet seed phrases, private keys and passwords are never uploaded. |
 | `identity` | Opens the Pearl Hub email sign-in page and receives a one-use PKCE authorization callback. Does not read your Google or Microsoft account. |
 
 **远程代码（Remote code）**：选 No, I am not using remote code（不使用远程代码）。
@@ -74,7 +74,7 @@
 **数据使用**：建议勾选下面三项，最终由你确认后提交（参考 `store/en.json` 的 `dataUseDisclosure`）。官方要求如实申报，这里不能选「不收集任何数据」。
 
 - 个人身份信息：可选的邮箱账号登录会用到邮箱地址。
-- 财务和付款信息：公开地址、余额、交易记录和已签名的交易，会发给链上查询服务 Blockbook。
+- 财务和付款信息：公开地址、余额、交易记录和已签名的交易，先发给我们自建的区块索引（pearlhub.net/node），官方 Blockbook 作为备用；已签名交易同时发给两边。
 - 身份验证信息：邮箱账号的登录令牌会发给 pearlhub.net；助记词、私钥和密码只留在本机。
 
 位置、网页浏览记录、用户活动、网站内容、通信、健康都不勾选：插件不收集 IP，只有网络基础设施能看到 IP。
@@ -96,6 +96,8 @@
 - 填完后提交审核。钱包类插件的审核可能比一般插件久，审核结果会发到联系邮箱。
 
 ## 七、用 API 提交新版本（0.1.3 起）
+
+**0.1.5 改了数据流向**（余额、记录和广播先走我们自建的区块索引 pearlhub.net/node）。提交 0.1.5 前先在后台「Privacy practices」里把 `pearlhub.net` 和 `blockbook.pearlresearch.ai` 的权限理由换成上表的新文字（三个主机权限合计 960 字符，限 1000），并核对数据使用说明；API 只上传安装包，不改这些文字。隐私政策 https://pearlhub.net/privacy 也要先更新（`prl-hub/site/privacy.html`）。
 
 新版本不用再开商店后台：`scripts/store-release.mjs` 通过 Chrome Web Store API v2 上传商店包并提交审核。Chrome 不允许任何扩展操作商店后台页面，所以浏览器自动化做不了这一步。
 

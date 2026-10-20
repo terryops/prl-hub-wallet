@@ -1,7 +1,7 @@
 import { createVault, keyFromPassword, open, seal, bytes64, type Envelope } from "./vault.ts";
 import { checkedMnemonic, newMnemonic, xpub, derived, addressMap, parseAmount, planTransaction, signTransaction, maxAmount, outpoint, type Network, type VaultData, type Pending, type Wallet } from "./wallet.ts";
-import { loadAccount, estimateFee, request, origin, notFound, alreadyKnown, type Snapshot } from "./chain.ts";
-import { txDetail, rawTxid } from "./transactions.ts";
+import { loadAccount, estimateFee, indexers, indexerHeaders, pinned, txCopies, alreadyKnown, type Snapshot } from "./chain.ts";
+import { txDetail, rawTxid, type TxDetail } from "./transactions.ts";
 import { CONTACTS, saveContact, removeContact } from "./contacts.ts";
 import { DONATION_ADDRESS, canDonate, donationAmount } from "./donation.ts";
 import { CONTACT_LINK, syncContacts } from "./contact-sync.ts";
@@ -70,7 +70,11 @@ async function status() {
 async function refresh(page = 1, scan = false) {
   const epoch = lockEpoch;
   const { data } = await loaded(), w = data.wallets.find((w) => w.id === data.selected)!;
-  const snapshot = await loadAccount(xpub(w.mnemonic, data.network), data.network, w.id, w.changeAddresses?.[data.network] || [], page, scan, { paths: w.addressPaths?.[data.network], fromHeight: w.scanHeight?.[data.network], active: () => assertEpoch(epoch) });
+  const prior = (await chrome.storage.session.get(SNAPSHOT))[SNAPSHOT] as Snapshot | undefined;
+  const previous = prior?.walletId === w.id && prior.network === data.network ? prior : undefined;
+  // 加载更多 reads from the index page 1 came from, so the pages can't straddle two indexes.
+  const bases = page > 1 && previous?.indexer ? pinned(data.network, previous.indexer, true) : undefined;
+  const snapshot = await loadAccount(xpub(w.mnemonic, data.network), data.network, w.id, w.changeAddresses?.[data.network] || [], page, scan, { paths: w.addressPaths?.[data.network], fromHeight: w.scanHeight?.[data.network], active: () => assertEpoch(epoch), bases });
   const current = await loaded();
   assertEpoch(epoch);
   if (current.data.selected !== w.id || current.data.network !== data.network) throw new Error("钱包已切换，请刷新。");
@@ -80,22 +84,20 @@ async function refresh(page = 1, scan = false) {
   wallet.scanHeight = { ...wallet.scanHeight, [data.network]: snapshot.scanHeight };
   const confirmed = new Set<Pending>();
   for (const pending of current.data.pending.filter(p => p.walletId === w.id && p.network === data.network)) {
-    let tx = snapshot.history.find(tx => tx.txid === pending.txid);
-    if (!tx) {
-      try {
-        tx = await request<Snapshot["history"][number]>(pending.network, `/api/v2/tx/${pending.txid}`);
-      } catch { /* Offline/not-found is inconclusive; retain the input reservation. */ }
-    }
+    // Confirmed in this refresh's history settles it; otherwise every indexer is asked, since the one this
+    // refresh read from may lag. Offline or not found is inconclusive: the input reservation stays.
+    const listed = snapshot.history.find(tx => tx.txid === pending.txid);
+    const state = (listed?.confirmations || 0) > 0 ? listed!.confirmations : await pendingState(pending.network, pending.txid);
     assertEpoch(epoch);
-    if (tx?.txid !== pending.txid || !Number.isSafeInteger(tx.confirmations) || tx.confirmations < 0) continue;
-    if (tx.confirmations > 0) confirmed.add(pending);
+    if (typeof state !== "number") continue;
+    if (state > 0) confirmed.add(pending);
     else pending.status = "submitted";
   }
   current.data.pending = current.data.pending.filter(p => !confirmed.has(p));
   await save(current.data);
-  const previous = (await chrome.storage.session.get(SNAPSHOT))[SNAPSHOT] as Snapshot | undefined;
   assertEpoch(epoch);
-  const same = previous?.walletId === w.id && previous.network === data.network;
+  // Older pages are kept only from the same index (see above).
+  const same = !!previous && previous.indexer === snapshot.indexer;
   // A page-1 refresh keeps the older pages loaded with 加载更多 only while its first page still reaches a
   // transaction that was already confirmed: everything older than that was loaded before, so nothing is
   // skipped. Unconfirmed entries are not carried over, since they may have left the mempool.
@@ -109,25 +111,59 @@ async function refresh(page = 1, scan = false) {
   await chrome.storage.session.set({ [SNAPSHOT]: snapshot });
   return snapshot;
 }
+/// What the indexers know of a transaction: its confirmations in the copy furthest along (on 2026-10-20 the
+/// official indexer showed a mined transaction as unconfirmed for hours), "missing" only when every indexer
+/// says it doesn't know it, or null when that can't be told.
+async function pendingState(network: Network, txid: string): Promise<number | "missing" | null> {
+  const copies = await txCopies(network, txid);
+  const counts = copies.flatMap((c) => c.state === "found" && typeof c.raw.confirmations === "number" && Number.isSafeInteger(c.raw.confirmations) && c.raw.confirmations >= 0 ? [c.raw.confirmations] : []);
+  if (counts.length) return Math.max(...counts);
+  return copies.every((c) => c.state === "missing") ? "missing" : null;
+}
+/// One node's answer to a broadcast. "notDelivered": turned away before any node saw it (a rate or size
+/// limit, an unknown path, a refused key), so it says nothing about the transaction.
+type Push = { kind: "ok" | "known" | "notDelivered" | "transport" } | { kind: "error"; message: string };
+async function pushOnce(base: string, hex: string, txid: string): Promise<Push> {
+  let response: { ok: boolean; status: number; json: () => Promise<unknown> };
+  try {
+    response = ANDROID ? await nativePost(base + "/api/v2/sendtx/", hex, "text/plain")
+      : await fetch(base + "/api/v2/sendtx/", { method: "POST", body: hex, headers: indexerHeaders(base, { "Content-Type": "text/plain" }), credentials: "omit", redirect: "error", signal: AbortSignal.timeout(30000) });
+  } catch { return { kind: "transport" }; }
+  if ([401, 403, 404, 413, 429].includes(response.status)) return { kind: "notDelivered" };
+  let body: { result?: unknown; error?: unknown };
+  try { body = (await response.json() || {}) as typeof body; } catch { return { kind: "transport" }; }
+  if (response.ok && body.result === txid) return { kind: "ok" };
+  // Only a JSON error from the indexer is the node's word; anything else (a proxy's page) says nothing.
+  if (typeof body.error === "string" && body.error.trim()) return alreadyKnown(body.error) ? { kind: "known" } : { kind: "error", message: body.error.slice(0, 300) };
+  return { kind: "transport" };
+}
+/// Sends a signed transaction to every indexer's node at once. Resolves as soon as one has it (accepted, or
+/// already had it) with that answer alone; the other requests keep going, so a stuck indexer doesn't hold
+/// up the send. Otherwise with every answer, in order of preference.
+function pushAll(network: Network, hex: string, txid: string): Promise<Push[]> {
+  const bases = indexers(network), results: Push[] = new Array(bases.length);
+  let left = bases.length;
+  return new Promise((resolve) => bases.forEach((base, i) => void pushOnce(base, hex, txid).then((r) => {
+    results[i] = r; left--;
+    if (r.kind === "ok" || r.kind === "known") resolve([r]);
+    else if (!left) resolve(results);
+  })));
+}
+const REJECTED = /min relay fee|mempool min fee|insufficient fee|inputs-missingorspent|mandatory-script-verify-flag-failed|bad-txns-/i;
 async function broadcast(p: Pending) {
   // Persisted before POST. A lost reply leaves this exact transaction available for
   // checking/retry and keeps its inputs reserved; never build a replacement silently.
-  try {
-    const response = ANDROID ? await nativePost(origin(p.network) + "/api/v2/sendtx/", p.hex, "text/plain")
-      : await fetch(origin(p.network) + "/api/v2/sendtx/", { method: "POST", body: p.hex, headers: { "Content-Type": "text/plain" }, credentials: "omit", redirect: "error", signal: AbortSignal.timeout(25000) });
-    const body = await response.json();
-    if (response.ok && body.result === p.txid || typeof body.error === "string" && alreadyKnown(body.error)) return "submitted" as const;
-    if (typeof body.error === "string" && /min relay fee|mempool min fee|insufficient fee|inputs-missingorspent|mandatory-script-verify-flag-failed|bad-txns-/i.test(body.error)) {
-      // Spent inputs are also what a retry of this transaction reports once it is mined.
-      if (!/inputs-missingorspent/i.test(body.error)) return "rejected" as const;
-      try {
-        const tx = await request<{ txid: string; confirmations: number }>(p.network, `/api/v2/tx/${p.txid}`);
-        return tx?.txid === p.txid ? "submitted" as const : "unknown" as const;
-      } catch (e) {
-        if (notFound(e)) return "rejected" as const;
-      }
-    }
-  } catch { /* Ambiguous transport outcome: keep the original transaction. */ }
+  const results = await pushAll(p.network, p.hex, p.txid);
+  if (results.some((r) => r.kind === "ok" || r.kind === "known")) return "submitted" as const;
+  // A verdict only when every node that saw the transaction refused it. One refusing while another didn't
+  // answer stays ambiguous: a policy difference between nodes must not hide a transaction that went out.
+  const reached = results.filter((r) => r.kind !== "notDelivered");
+  if (reached.length && reached.every((r) => r.kind === "error" && REJECTED.test(r.message))) {
+    // Spent inputs are also what a retry of this transaction reports once it is mined.
+    if (!reached.some((r) => r.kind === "error" && /inputs-missingorspent/i.test(r.message))) return "rejected" as const;
+    const state = await pendingState(p.network, p.txid);
+    return typeof state === "number" ? "submitted" as const : state === "missing" ? "rejected" as const : "unknown" as const;
+  }
   return "unknown" as const;
 }
 /// The open wallet's addresses this extension knows: the derived ones it signs for, change found on the
@@ -138,23 +174,17 @@ function ownAddresses(w: Wallet, network: Network) {
   for (const a of Object.keys(w.addressPaths?.[network] || {})) own.add(a.toLowerCase());
   return own;
 }
-/// 重新广播 from 交易详情: send a transaction the indexer already holds to the network again. Sending the
+/// 重新广播 from 交易详情: send a transaction the indexers already hold to the network again. Sending the
 /// same transaction twice is safe, so this needs no password and keeps no record.
 async function pushTx(network: Network, hex: string, txid: string): Promise<{ outcome: "sent" | "known" | "rejected" | "unknown" | "notSent"; reason?: string }> {
   if (rawTxid(hex) !== txid) return { outcome: "notSent" };
-  let response: { ok: boolean; status: number; json: () => Promise<unknown> };
-  try {
-    response = ANDROID ? await nativePost(origin(network) + "/api/v2/sendtx/", hex, "text/plain")
-      : await fetch(origin(network) + "/api/v2/sendtx/", { method: "POST", body: hex, headers: { "Content-Type": "text/plain" }, credentials: "omit", redirect: "error", signal: AbortSignal.timeout(30000) });
-  } catch { return { outcome: "unknown" }; }
-  // Turned away before any node saw it (rate or size limit, unknown path): certainly not relayed.
-  if ([401, 403, 404, 413, 429].includes(response.status)) return { outcome: "notSent" };
-  let body: { result?: unknown; error?: unknown };
-  try { body = (await response.json() || {}) as typeof body; } catch { return { outcome: "unknown" }; }
-  if (response.ok && body.result === txid) return { outcome: "sent" };
-  // Only a JSON error from the indexer is the node's verdict; anything else says nothing about the transaction.
-  if (typeof body.error === "string" && body.error.trim()) return alreadyKnown(body.error) ? { outcome: "known" } : { outcome: "rejected", reason: body.error.slice(0, 300) };
-  return { outcome: "unknown" };
+  const results = await pushAll(network, hex, txid);
+  if (results.some((r) => r.kind === "ok")) return { outcome: "sent" };
+  if (results.some((r) => r.kind === "known")) return { outcome: "known" };
+  const reached = results.filter((r) => r.kind !== "notDelivered");
+  if (!reached.length) return { outcome: "notSent" };
+  const errors = reached.flatMap((r) => r.kind === "error" ? [r.message] : []);
+  return errors.length === reached.length ? { outcome: "rejected", reason: errors[0] } : { outcome: "unknown" };
 }
 let queue: Promise<unknown> = Promise.resolve();
 function enqueue<T>(work: () => Promise<T>): Promise<T> {
@@ -262,24 +292,36 @@ async function handle(m: Message, epoch: number) {
     await chrome.storage.session.remove(REVIEW); return status();
   }
   if (m.command === "refresh") { await refresh(Number.isSafeInteger(m.page) ? Number(m.page) : 1, m.scan === true); return status(); }
-  if (m.command === "fee") return estimateFee(data.network);
+  if (m.command === "fee") {
+    // From the index the balance on screen came from, like the native app's send screen.
+    const shown = (await chrome.storage.session.get(SNAPSHOT))[SNAPSHOT] as Snapshot | undefined;
+    return estimateFee(data.network, shown?.walletId === w.id && shown.network === data.network ? shown.indexer : undefined);
+  }
   if (m.command === "tx-detail" || m.command === "tx-rebroadcast") {
     const txid = text(m.txid);
     if (!/^[0-9a-f]{64}$/.test(txid)) throw new Error("请输入交易 ID：64 位，由 0–9 和 a–f 组成。");
-    let raw: unknown;
-    try { raw = await request(data.network, `/api/v2/tx/${txid}`, undefined, 20000); }
-    catch (e) {
-      if (notFound(e)) { if (m.command === "tx-detail") return { found: false }; throw new Error("没有找到这笔交易。刚发出的交易可能要稍等片刻才能查到。"); }
-      throw new Error("操作未完成，请重试。");
-    }
+    // Every indexer at once; the copy furthest along is shown (on a tie the first, ours). Not found when one
+    // says so and none has it: ours answers 503 while it catches up, which says nothing.
+    const copies = await txCopies(data.network, txid);
     stillActive();
-    const tx = txDetail(raw, txid, ownAddresses(w, data.network));
-    if (!tx) throw new Error("操作未完成，请重试。");
-    if (m.command === "tx-detail") return { found: true, tx };
+    const own = ownAddresses(w, data.network);
+    let best: { tx: TxDetail; raw: Record<string, unknown> } | undefined;
+    for (const c of copies) {
+      const tx = c.state === "found" ? txDetail(c.raw, txid, own) : null;
+      if (tx && (!best || tx.confirmations > best.tx.confirmations)) best = { tx, raw: (c as { raw: Record<string, unknown> }).raw };
+    }
+    if (!best) {
+      if (!copies.some((c) => c.state === "missing")) throw new Error("操作未完成，请重试。");
+      if (m.command === "tx-detail") return { found: false };
+      throw new Error("没有找到这笔交易。刚发出的交易可能要稍等片刻才能查到。");
+    }
+    if (m.command === "tx-detail") return { found: true, tx: best.tx };
     // Mined since the page was drawn: the network has it.
-    if (tx.confirmations > 0) return { outcome: "known" };
-    if (!tx.rebroadcast) throw new Error("操作未完成，请重试。");
-    return pushTx(data.network, (raw as { hex: string }).hex.toLowerCase(), txid);
+    if (best.tx.confirmations > 0) return { outcome: "known" };
+    // The signed bytes of any copy that has them (an indexer may omit them); pushTx checks they are this transaction.
+    const signed = [best.raw, ...copies.flatMap((c) => c.state === "found" ? [c.raw] : [])].map((raw) => typeof raw.hex === "string" ? raw.hex.toLowerCase() : "").find((hex) => hex && rawTxid(hex) === txid);
+    if (best.tx.coinbase || !signed) throw new Error("操作未完成，请重试。");
+    return pushTx(data.network, signed, txid);
   }
   if (m.command === "prepare") {
     if (m.donation === true && !canDonate(data.network, derived(xpub(w.mnemonic, data.network), data.network, 0, 0).address!, derived(xpub(w.mnemonic, data.network), data.network, 0, w.receiveIndex).address!)) throw new Error("当前钱包不能捐赠。");
@@ -331,18 +373,14 @@ async function handle(m: Message, epoch: number) {
       p.status = await broadcast(p);
     }
     else {
-      try {
-        const tx = await request<{ txid: string; confirmations: number }>(p.network, `/api/v2/tx/${p.txid}`);
-        if (tx?.txid !== p.txid) throw new Error("链上交易编号不一致。");
-        if (!Number.isSafeInteger(tx.confirmations) || tx.confirmations < 0) throw new Error("链上服务暂时不可用。");
-        if (tx.confirmations > 0) data.pending = data.pending.filter((x) => x !== p);
-        else p.status = "submitted";
-      } catch (e) {
-        // Not found alone cannot prove a broadcast failed. Keep its reservation
-        // until the user explicitly discards it, including rejected transactions.
-        if (!notFound(e)) throw e;
-        if (p.status !== "rejected") p.status = "unknown";
-      }
+      const state = await pendingState(p.network, p.txid);
+      stillActive();
+      if (state === null) throw new Error("链上服务暂时不可用。");
+      // Not found alone cannot prove a broadcast failed. Keep its reservation
+      // until the user explicitly discards it, including rejected transactions.
+      if (state === "missing") { if (p.status !== "rejected") p.status = "unknown"; }
+      else if (state > 0) data.pending = data.pending.filter((x) => x !== p);
+      else p.status = "submitted";
     }
     await save(data); return status();
   }

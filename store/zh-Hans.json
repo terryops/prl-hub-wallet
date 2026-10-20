@@ -7,10 +7,10 @@
     "storage": "本机保存加密钱包、加密待确认交易、公开联系人及偏好；解锁密钥只保留在可信会话至锁定，不使用 Chrome 账号同步。",
     "alarms": "每分钟检查一次无操作状态，实现 5 分钟自动锁定。",
     "sidePanel": "点击工具栏图标时在浏览器侧边栏打开本机钱包界面。",
-    "https://blockbook.pearlresearch.ai/*": "查询主网余额、公开账户/地址历史、UTXO、手续费和交易状态；仅广播用户明确确认的本机签名交易。",
+    "https://blockbook.pearlresearch.ai/*": "Pearl Hub 自建索引不可用或数据落后时，改由它查询主网余额、公开账户/地址历史、UTXO、手续费和交易状态；交易查询和用户明确确认的本机签名交易同时发给两边。",
     "https://blockbook.testnet.pearlresearch.ai/*": "相同链上查询及明确确认的广播，仅用于测试网。",
-    "https://pearlhub.net/*": "Public market requests carry no wallet identity. Optional email account login and authenticated configuration sync share contact names, public addresses and notes. Account data is encrypted at rest and readable by the server; wallet seed phrases, private keys and passwords are never uploaded.",
+    "https://pearlhub.net/*": "Pearl Hub's own blockchain index at pearlhub.net/node is asked first for balances, address history, UTXOs, fees and transaction status (sending the wallet's public account key and addresses) and receives explicitly confirmed signed transactions. Public market requests carry no wallet identity. Optional email account login and authenticated configuration sync share contact names, public addresses and notes. Account data is encrypted at rest and readable by the server; wallet seed phrases, private keys and passwords are never uploaded.",
     "identity": "Opens the Pearl Hub email sign-in page and receives a one-use PKCE authorization callback. Does not read your Google or Microsoft account."
   },
-  "dataUseDisclosure": "金融数据：为钱包功能处理公开钱包/账户地址、余额、交易历史和明确确认的签名交易；Blockbook 接收链上查询及签名广播。助记词、私钥、密码留在设备。联系人名称/地址/备注和偏好留在本机。行情服务只收到无钱包身份的公开 GET；网络基础设施可看到 IP。用户点击深链后公开地址通过 URL 片段交给网页，网页随后可能查询地址。无统计、广告、售卖数据、浏览历史收集或 Chrome 账号同步。不能勾选“完全不使用数据”：本机和公开索引器仍会处理金融数据。 Optional email accounts store email, public contacts and device/session metadata on Cloudflare. Configuration is encrypted at rest; the server can read it. Sign out restores the previous guest contacts. Cloud configuration export and account deletion are available on the account page."
+  "dataUseDisclosure": "金融数据：为钱包功能处理公开钱包/账户地址、余额、交易历史和明确确认的签名交易；Pearl Hub 自建的 Blockbook 索引（pearlhub.net/node）接收链上查询，官方 Blockbook 作为备用；签名广播同时发给两边。助记词、私钥、密码留在设备。联系人名称/地址/备注和偏好留在本机。行情服务只收到无钱包身份的公开 GET；网络基础设施可看到 IP。用户点击深链后公开地址通过 URL 片段交给网页，网页随后可能查询地址。无统计、广告、售卖数据、浏览历史收集或 Chrome 账号同步。不能勾选“完全不使用数据”：本机和区块索引仍会处理金融数据。 Optional email accounts store email, public contacts and device/session metadata on Cloudflare. Configuration is encrypted at rest; the server can read it. Sign out restores the previous guest contacts. Cloud configuration export and account deletion are available on the account page."
 }

@@ -118,12 +118,16 @@ export type PoolOverview = {
   payouts?: PoolPayout[];
   /** Block luck the service measured from five-minute samples, by window ("24h", "7d", "14d"). */
   luck?: Partial<Record<string, PoolLuck>> | null;
+  /** Orphaned blocks over the last week: from the pool's own block list or seen on chain, whichever is higher; or null. */
+  orphans?: PoolOrphans | null;
   realFeeMeasurement?: {
     pool: string; scheme: string; netPRL: number; expectedPRL: number;
     start: number; end: number; measuredAt: number; estimated: boolean;
     sampleCount: number; theoryBasis: string;
   } | null;
 };
+/** Blocks from `start` to `end` and how many were orphaned; `source` says whose count it is. */
+export type PoolOrphans = { start: number; end: number; blocks: number; orphans: number; source?: "pool" | "chain" };
 /** One window: the pool's blocks ÷ the blocks its reported work should have found. */
 export type PoolLuck = {
   ratio: number; blocks: number; expectedBlocks: number;

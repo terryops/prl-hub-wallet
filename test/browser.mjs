@@ -37,8 +37,10 @@ try {
     globalThis.fixture = { broadcasts: [], mode: "unknown", expected: "", confirmations: 0, fail: false };
     globalThis.fetch = async (url, init = {}) => {
       if (globalThis.fixture.fail) throw new Error("Fixture offline");
-      const u = new URL(String(url)), p = u.pathname;
-      if (!/^https:\/\/blockbook\.(?:testnet\.)?pearlresearch\.ai$/.test(u.origin)) throw new Error("Unexpected test host");
+      // Mainnet asks Pearl Hub's own index (pearlhub.net/node, with its key) and the official one.
+      const u = new URL(String(url)), ownIndex = u.origin === "https://pearlhub.net" && u.pathname.startsWith("/node/"), p = ownIndex ? u.pathname.slice(5) : u.pathname;
+      if (!ownIndex && !/^https:\/\/blockbook\.(?:testnet\.)?pearlresearch\.ai$/.test(u.origin)) throw new Error("Unexpected test host");
+      if (ownIndex !== !!new Headers(init.headers).get("x-pearl-hub-key")) throw new Error("The index key goes to our own index only");
       const testnet = u.hostname.includes("testnet"), empty = { balance: "0", unconfirmedBalance: "0", page: 1, totalPages: 1, transactions: [], tokens: [] };
       const utxos = [
         { txid: "11".repeat(32), vout: 0, value: "100000000", address, confirmations: 10 },
@@ -112,7 +114,9 @@ try {
   await page.getByRole("button", { name: "重试原交易" }).waitFor();
   const sent = (await rpc("status")).data.pending[0];
   assert.equal(sent.status, "unknown");
+  // One post to each mainnet indexer, the same signed bytes.
   const broadcastHex = await worker.evaluate(() => fixture.broadcasts[0]);
+  assert.deepEqual(await worker.evaluate(() => fixture.broadcasts), [broadcastHex, broadcastHex]);
   await worker.evaluate((txid) => { fixture.mode = "submitted"; fixture.expected = txid; }, sent.txid);
   const reattempt = await rpc("prepare", { to: vectors.cases[0].to, amount: "1", fee: 50000 });
   assert.equal(reattempt.ok, false); assert.match(reattempt.error, /不足/);
@@ -121,7 +125,8 @@ try {
   await page.getByLabel("解锁密码", { exact: true }).fill("public-test-password");
   await page.getByRole("button", { name: "重试原交易", exact: true }).last().click();
   await page.locator(".pending span").filter({ hasText: "已广播" }).waitFor();
-  assert.equal(await worker.evaluate(() => fixture.broadcasts[1]), broadcastHex);
+  assert.ok((await worker.evaluate(() => fixture.broadcasts)).slice(2).every((hex) => hex === broadcastHex));
+  assert.ok((await worker.evaluate(() => fixture.broadcasts.length)) > 2);
   await worker.evaluate(() => { fixture.confirmations = 1; });
   await page.getByRole("button", { name: "刷新 ↻", exact: true }).click();
   await page.waitForFunction(() => !document.querySelector(".pending")); check("retry exact transaction; refresh automatically reconciles confirmation");

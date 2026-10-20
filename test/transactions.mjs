@@ -9,6 +9,10 @@ const { context, page, worker, vectors, errors, close } = await fixtureWallet({ 
 const pass = (text) => console.log(`PASS ${text}`);
 try {
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  // The balance and history came from Pearl Hub's own index (with its key); the official one wasn't needed.
+  const used = await worker.evaluate(() => fixture.indexers);
+  assert.ok(used.own > 0 && !used.official, JSON.stringify(used));
+  pass("the wallet reads from Pearl Hub's own index first, with its key");
   const own = vectors.addresses[0], other = vectors.cases[0].to;
   // The real mempool-style transaction (its signed bytes are its txid) paying this wallet, the history
   // fixture's receipt, a pool-style payout with 25 outputs, and a real coinbase with an OP_RETURN output.
@@ -21,7 +25,7 @@ try {
     globalThis.fetch = async (url, init = {}) => {
       const p = new URL(String(url)).pathname;
       if (p.includes("/sendtx/")) { fixture.posted.push(init.body); return Response.json({ result: answers[0].txid }); }
-      const m = /^\/api\/v2\/tx\/([0-9a-f]{64})$/.exec(p);
+      const m = /^(?:\/node)?\/api\/v2\/tx\/([0-9a-f]{64})$/.exec(p);
       if (m) {
         const tx = answers.find((t) => t.txid === m[1]);
         return tx ? Response.json(tx) : Response.json({ error: `Transaction '${m[1]}' not found` }, { status: 400 });
@@ -78,7 +82,7 @@ try {
   await page.screenshot({ path: `${output}/lookup-mempool-360.png` });
   await button("重新广播").click();
   await page.getByText("已重新广播，交易再次发往网络。", { exact: true }).waitFor();
-  assert.deepEqual(await worker.evaluate(() => fixture.posted), [mempool.hex]);
+  assert.deepEqual(await worker.evaluate(() => fixture.posted), [mempool.hex, mempool.hex], "sent to both mainnet indexers");
   pass("lookup refuses non-txids, finds explorer links, reports not found, and rebroadcasts the indexer's signed copy");
 
   await input.fill(txs.coinbase.txid); await button("查询").click();

@@ -55,10 +55,12 @@ export const extensionSecurity: SecuritySection[] = [
   { title: "neverReceive", rows: [
     { icon: "key", title: "keys", text: "extKeys" },
     { icon: "globe", title: "extPagesTitle", text: "extPages" },
-    { icon: "history", title: "history", text: "extHistory" },
     { icon: "eyeOff", title: "tracking", text: "extTracking" },
   ] },
   { title: "toServer", rows: [
+    // Balances and history: our own index (pearlhub.net/node) first, the official one as fallback; the
+    // wallet's indexers() in prl-hub-wallet src/chain.ts.
+    { icon: "history", title: "history", text: "extHistory" },
     { icon: "market", title: "publicData", text: "extPublic" },
     { icon: "account", title: "account", text: "extAccount" },
   ] },

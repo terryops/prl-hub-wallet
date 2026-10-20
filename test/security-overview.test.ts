@@ -35,3 +35,21 @@ test("security overview: vault, lock and sync facts match the code", () => {
   assert.match(locales.en.extKeys, /600,000/);
   assert.match(locales.en.extKeys, /5 minutes/);
 });
+
+test("security overview: balances and history go to our own index first, then the official one", async () => {
+  // extHistory / extExplorer describe indexers() in src/chain.ts; change the copy with it.
+  const { indexers, OWN_MAINNET } = await import("../src/chain.ts");
+  const { extensionSecurity } = await import("../shared/security-overview.ts");
+  assert.equal(OWN_MAINNET, "https://pearlhub.net/node");
+  assert.deepEqual(indexers("mainnet"), [OWN_MAINNET, "https://blockbook.pearlresearch.ai"]);
+  assert.deepEqual(indexers("testnet"), ["https://blockbook.testnet.pearlresearch.ai"]);
+  for (const [lang, copy] of Object.entries(locales)) {
+    assert.match(copy.extHistory, /pearlhub\.net\/node[\s\S]*blockbook\.pearlresearch\.ai/, lang);
+    assert.match(copy.extHistory, /xpub/, lang);
+    assert.match(copy.extExplorer, /blockbook\.testnet\.pearlresearch\.ai/, lang);
+  }
+  // Our server receives them now, so the row sits under "Sent to our server", not "What we never receive".
+  const section = (title: string) => extensionSecurity.find((s) => s.title === title)!.rows.map((r) => r.text);
+  assert.ok(section("toServer").includes("extHistory"));
+  assert.ok(!section("neverReceive").includes("extHistory"));
+});

@@ -43,8 +43,10 @@ for (const network of ["mainnet", "testnet"] as Network[]) for (const scenario o
     const original = fetch, bodies: string[] = [];
     let mode = "submitted", confirmations = 0, signedId = "";
     globalThis.fetch = async (input, init) => {
-      const url = new URL(String(input)), path = url.pathname;
-      assert.equal(url.hostname, network === "mainnet" ? "blockbook.pearlresearch.ai" : "blockbook.testnet.pearlresearch.ai");
+      const url = new URL(String(input)), own = url.hostname === "pearlhub.net", path = own ? url.pathname.replace(/^\/node\//, "/") : url.pathname;
+      // Mainnet asks Pearl Hub's own index (with its key) and the official one; testnet only the official one.
+      assert.ok(network === "mainnet" ? own || url.hostname === "blockbook.pearlresearch.ai" : url.hostname === "blockbook.testnet.pearlresearch.ai", url.href);
+      assert.equal(new Headers(init?.headers).get("x-pearl-hub-key") != null, own, url.href);
       if (path.includes("/sendtx/")) {
         assert.equal(init?.method, "POST"); const body = String(init?.body); bodies.push(body);
         signedId = btc.Transaction.fromRaw(hex.decode(body)).id;
@@ -79,7 +81,7 @@ for (const network of ["mainnet", "testnet"] as Network[]) for (const scenario o
       const tx = btc.Transaction.fromRaw(hex.decode(bodies[0]));
       assert.equal(tx.getOutput(0).amount!.toString(), review.data.amount);
       assert.equal(reservedInputs.reduce((n, u) => n + BigInt(u.value), 0n), BigInt(review.data.amount) + BigInt(review.data.fee) + BigInt(review.data.change));
-      assert.equal((await rpc("send", { id: review.data.id, password })).ok, false); assert.equal(bodies.length, 1);
+      assert.equal((await rpc("send", { id: review.data.id, password })).ok, false); assert.equal(bodies.length, network === "mainnet" ? 2 : 1, "one post per indexer");
       const second = await rpc("prepare", { to, amount: "0.1", fee: 50000, recovery });
       if (second.ok) {
         const next = ((await session.get("wallet.review"))["wallet.review"] as any).utxos as UTXO[];
