@@ -159,7 +159,8 @@ test("invalid fee estimates fall back to the default rate and say it is not an e
   } finally { globalThis.fetch = original; }
 });
 // The official indexer's answers on 2026-10-20 (tip 130692): its 2-block estimate asked ~1,955 sat/vB
-// while recent blocks took 1–81 sat/vB. Blocks with only a coinbase have no fee statistics.
+// while recent blocks took 1–81 sat/vB, and most transactions in them paid a fixed 81 sat/vB. Blocks with
+// only a coinbase have no fee statistics.
 const feeDay = (overrides: Record<string, unknown> = {}) => async (url: string | URL | Request) => {
   const p = new URL(String(url)).pathname;
   const answers: Record<string, unknown> = {
@@ -173,26 +174,44 @@ const feeDay = (overrides: Record<string, unknown> = {}) => async (url: string |
   if (p.startsWith("/api/v2/feestats/")) return Response.json({ txCount: 0, decilesFeePerKb: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] });
   throw new Error("unexpected " + p);
 };
-test("a skewed 2-block estimate is capped by the 6-block estimate and recent blocks' median fees", async () => {
+test("a skewed 2-block estimate is capped by the 6-block estimate and what recent blocks' cheaper transactions paid", async () => {
   const original = fetch;
   try {
     globalThis.fetch = feeDay() as typeof fetch;
-    // Was 1,954,566 per kB (about 0.003 PRL for a 154-vbyte payment, 24 times this); now the busiest recent block's median.
-    assert.deepEqual(await estimateFee("mainnet"), { fee: 81441, estimated: true });
+    // Was 1,954,566 per kB (about 0.003 PRL for a 154-vbyte payment); then 81,441, the fixed rate many
+    // wallets paid; now the middle of the blocks' 10th percentiles (1,005 and 2,014: the upper one).
+    assert.deepEqual(await estimateFee("mainnet"), { fee: 2014, estimated: true });
     globalThis.fetch = feeDay({ "/api/v2/": { error: "down" } }) as typeof fetch;
     assert.deepEqual(await estimateFee("mainnet"), { fee: 1708, estimated: true }, "no block statistics: the 6-block estimate caps");
     globalThis.fetch = feeDay({ "/api/v1/estimatefee/2": { result: "-1" } }) as typeof fetch;
-    assert.deepEqual(await estimateFee("mainnet"), { fee: 81441, estimated: true }, "no 2-block estimate: the cap is the rate");
+    assert.deepEqual(await estimateFee("mainnet"), { fee: 2014, estimated: true }, "no 2-block estimate: the cap is the rate");
     globalThis.fetch = feeDay({ "/api/v2/feestats/130692": { txCount: 60, decilesFeePerKb: [1, 2, 3] }, "/api/v2/feestats/130690": new Response("busy", { status: 503 }) }) as typeof fetch;
     assert.deepEqual(await estimateFee("mainnet"), { fee: 1708, estimated: true }, "malformed or failed statistics are skipped");
+    // Twelve blocks are read, as half of them are often empty.
+    const asked: string[] = [];
+    globalThis.fetch = (async (url: string | URL | Request) => { asked.push(new URL(String(url)).pathname); return feeDay()(url); }) as typeof fetch;
+    await estimateFee("mainnet", "https://blockbook.pearlresearch.ai");
+    assert.deepEqual(asked.filter((p) => p.includes("/feestats/")).map((p) => Number(p.split("/").pop())).sort(), Array.from({ length: 12 }, (_, i) => 130681 + i));
   } finally { globalThis.fetch = original; }
 });
 test("fee choice: the cap, the fallback and the relay floor and ceiling", () => {
-  assert.equal(chooseFeePerKB(1954566, 1708, [50218, 81441]), 81441);
-  assert.equal(chooseFeePerKB(20000, 1708, [50218]), 20000, "an estimate below the cap stands");
+  // The official node on 2026-10-20: recent blocks' 10th percentiles 1–10 sat/vB.
+  assert.equal(chooseFeePerKB(1954566, 1708, [1000, 1004, 10047, 1000]), 1708);
+  // Our node the same evening: its 2-block estimate and half the transactions in some blocks sat at
+  // 81 sat/vB, but every block had room and took 1 sat/vB transactions.
+  assert.equal(chooseFeePerKB(81441, 1000, [1000, 81441, 1000, 2013, 1000, 10047, 1000]), 1000);
+  // One block whose cheap end was high doesn't decide it either (middle value, rounded up).
+  assert.equal(chooseFeePerKB(81441, 1000, [1000, 81441]), 81441);
+  assert.equal(chooseFeePerKB(81441, 1000, [1000, 1000, 81441]), 1000);
+  // Full blocks: even their cheaper transactions pay more, so the cap rises with them.
+  assert.equal(chooseFeePerKB(300000, 120000, [180000, 200000, 190000]), 190000);
+  assert.equal(chooseFeePerKB(200000, 150000, [250000]), 200000, "an estimate below the cap stands");
+  assert.equal(chooseFeePerKB(200000, 300000, []), 200000);
   assert.equal(chooseFeePerKB(20000, null, []), 20000, "nothing to cap with");
+  assert.equal(chooseFeePerKB(1954566, null, []), 1954566);
+  assert.equal(chooseFeePerKB(1000, 1000, [1000, 1002]), 1000);
   assert.equal(chooseFeePerKB(null, null, []), 50000);
-  assert.equal(chooseFeePerKB(null, 3000, []), 3000);
+  assert.equal(chooseFeePerKB(null, 3000, [2000]), 3000);
   assert.equal(chooseFeePerKB(500, null, []), 1000);
   assert.equal(chooseFeePerKB(99999999, 99999999, []), 10000000);
 });

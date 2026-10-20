@@ -247,9 +247,10 @@ export async function nodeFeeEstimate(network: Network, blocks: number, bases = 
     return Number.isFinite(value) && value > 0 ? Math.floor(Math.min(value, 1) * 100000000) : null;
   } catch { return null; }
 }
-/// The median fee rate of each of the last `count` blocks that had transactions besides the coinbase
-/// (`/feestats/` is ~150 bytes a block). Empty when the tip or every block's stats couldn't be read.
-export async function recentBlockMedianFees(network: Network, count = 6, bases = indexers(network)): Promise<number[]> {
+/// The 10th-percentile fee rate of each of the last `count` blocks that had transactions besides the
+/// coinbase: what the cheaper transactions that got in paid. Twelve blocks, as half of them are often
+/// empty (`/feestats/` is ~150 bytes a block). Empty when the tip or every block's stats couldn't be read.
+export async function recentBlockLowFees(network: Network, count = 12, bases = indexers(network)): Promise<number[]> {
   let tip: unknown, at = bases;
   try {
     const status = await requestFrom<{ blockbook?: { bestHeight?: unknown } }>(bases, "/api/v2/", undefined, 10000);
@@ -257,23 +258,27 @@ export async function recentBlockMedianFees(network: Network, count = 6, bases =
   } catch { return []; }
   if (typeof tip !== "number" || !Number.isSafeInteger(tip) || tip <= 0) return [];
   const heights = Array.from({ length: Math.min(count, tip) }, (_, i) => tip - i);
-  const medians = await Promise.all(heights.map(async (height) => {
+  const lows = await Promise.all(heights.map(async (height) => {
     try {
       const stats = await request<{ txCount?: unknown; decilesFeePerKb?: unknown }>(network, `/api/v2/feestats/${height}`, undefined, 10000, at);
       if (typeof stats.txCount !== "number" || stats.txCount <= 0 || !Array.isArray(stats.decilesFeePerKb) || stats.decilesFeePerKb.length !== 11) return null;
-      const median = Number(stats.decilesFeePerKb[5]);
-      return Number.isFinite(median) && median > 0 ? Math.floor(median) : null;
+      const low = Number(stats.decilesFeePerKb[1]);
+      return Number.isFinite(low) && low > 0 ? Math.floor(low) : null;
     } catch { return null; }
   }));
-  return medians.filter((median): median is number => median != null);
+  return lows.filter((low): low is number => low != null);
 }
 /// The node's 2-block estimate is the default, but it can sit far above what blocks actually take: on
 /// 2026-10-20 the official node asked ~1,955 sat/vB while every recent block was including 1 sat/vB
 /// transactions (its estimator was skewed by a mempool still holding transactions mined hours earlier).
-/// So it is capped at the higher of the 6-block estimate and recent blocks' median fee; real congestion
-/// raises both, a skewed estimator doesn't. Same rule as the native app.
-export function chooseFeePerKB(fast: number | null, slow: number | null, recentMedians: number[]) {
-  const cap = Math.max(slow ?? 0, ...recentMedians.slice(0, 64), 0);
+/// So it is capped at the higher of the 6-block estimate and what the cheaper transactions in recent
+/// blocks paid: the middle (upper) value of each block's 10th percentile. Full blocks raise both; a skewed
+/// estimator doesn't. Not each block's median: many wallets pay one fixed rate (81 sat/vB that evening,
+/// in blocks with room to spare), which says nothing about what it takes to get in. Same rule as the
+/// native app (prl-hub 67cd81b).
+export function chooseFeePerKB(fast: number | null, slow: number | null, recentLows: number[]) {
+  const sorted = [...recentLows].sort((a, b) => a - b);
+  const cap = Math.max(slow ?? 0, sorted.length ? sorted[Math.floor(sorted.length / 2)] : 0);
   const rate = fast != null ? (cap > 0 ? Math.min(fast, cap) : fast) : cap > 0 ? cap : FEE_FALLBACK;
   return Math.min(FEE_MAX, Math.max(FEE_MIN, rate));
 }
@@ -282,6 +287,6 @@ export function chooseFeePerKB(fast: number | null, slow: number | null, recentM
 /// `prefer`: the indexer the balance on screen came from (the others stay the fallback).
 export async function estimateFee(network: Network, prefer?: string): Promise<{ fee: number; estimated: boolean }> {
   const bases = pinned(network, prefer);
-  const [fast, slow, medians] = await Promise.all([nodeFeeEstimate(network, 2, bases), nodeFeeEstimate(network, 6, bases), recentBlockMedianFees(network, 6, bases)]);
-  return { fee: chooseFeePerKB(fast, slow, medians), estimated: fast != null || slow != null || medians.length > 0 };
+  const [fast, slow, lows] = await Promise.all([nodeFeeEstimate(network, 2, bases), nodeFeeEstimate(network, 6, bases), recentBlockLowFees(network, 12, bases)]);
+  return { fee: chooseFeePerKB(fast, slow, lows), estimated: fast != null || slow != null || lows.length > 0 };
 }
