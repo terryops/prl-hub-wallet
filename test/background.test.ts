@@ -377,3 +377,69 @@ test('contact sync after sign-in waits for a contact save instead of overwriting
     await rpc('account-logout'); globalThis.fetch = original;
   }
 });
+// Real answers of the official indexer (mainnet block 130692), see transactions.test.ts.
+const txFixtures = JSON.parse(readFileSync(new URL('./tx-fixtures.json', import.meta.url), 'utf8'));
+test('transaction details flag this wallet\'s addresses and tell a missing transaction from a failed lookup', async () => {
+  await reset(); const original = fetch, tx = txFixtures.normal;
+  const ours = { ...tx, vout: [{ ...tx.vout[0], addresses: [vectors.addresses[0]] }, tx.vout[1]] };
+  try {
+    globalThis.fetch = async () => Response.json(ours);
+    const found = await rpc('tx-detail', { txid: tx.txid });
+    assert.equal(found.ok, true, found.error); assert.equal(found.data.found, true);
+    assert.deepEqual(found.data.tx.outputs.map((r: any) => r.mine), [true, false]); assert.equal(found.data.tx.net, tx.vout[0].value);
+    globalThis.fetch = async () => Response.json({ error: `Transaction '${tx.txid}' not found` }, { status: 400 });
+    assert.deepEqual((await rpc('tx-detail', { txid: tx.txid })).data, { found: false });
+    globalThis.fetch = async () => { throw new Error('offline'); };
+    assert.equal((await rpc('tx-detail', { txid: tx.txid })).ok, false);
+    globalThis.fetch = async () => Response.json({ ...tx, txid: 'ee'.repeat(32) });
+    assert.equal((await rpc('tx-detail', { txid: tx.txid })).ok, false);
+    assert.equal((await rpc('tx-detail', { txid: tx.txid.toUpperCase() })).ok, false);
+    assert.equal((await rpc('tx-detail', { txid: tx.txid, expectedNetwork: 'testnet' })).ok, false);
+    await rpc('lock'); assert.equal((await rpc('tx-detail', { txid: tx.txid })).ok, false);
+  } finally { globalThis.fetch = original; }
+});
+test('rebroadcast resends the indexer\'s copy of an unconfirmed transaction and reports what the node said', async () => {
+  await reset(); const original = fetch, tx = { ...txFixtures.normal, confirmations: 0, blockHeight: -1 };
+  const posted: string[] = [];
+  const serve = (send: () => Response, lookup: unknown = tx) => (async (url: string, init?: RequestInit) => {
+    if (new URL(String(url)).pathname.includes('/sendtx/')) { posted.push(String(init?.body)); return send(); }
+    return Response.json(lookup);
+  }) as typeof fetch;
+  try {
+    for (const [reply, expected] of [
+      [() => Response.json({ result: tx.txid }), { outcome: 'sent' }],
+      [() => Response.json({ error: 'already have transaction ' + tx.txid }, { status: 400 }), { outcome: 'known' }],
+      [() => Response.json({ error: '-26: min relay fee not met' }, { status: 400 }), { outcome: 'rejected', reason: '-26: min relay fee not met' }],
+      [() => new Response('Too Many Requests', { status: 429 }), { outcome: 'notSent' }],
+      [() => new Response('<html>bad gateway</html>', { status: 502 }), { outcome: 'unknown' }],
+      [() => { throw new Error('reply lost'); }, { outcome: 'unknown' }],
+    ] as const) {
+      globalThis.fetch = serve(reply as () => Response);
+      const r = await rpc('tx-rebroadcast', { txid: tx.txid });
+      assert.equal(r.ok, true, r.error); assert.deepEqual(r.data, expected);
+    }
+    assert.equal(posted.length, 6); assert.ok(posted.every((body) => body === tx.hex));
+    posted.length = 0;
+    globalThis.fetch = serve(() => Response.json({ result: tx.txid }), { ...tx, confirmations: 3, blockHeight: 130692 });
+    assert.deepEqual((await rpc('tx-rebroadcast', { txid: tx.txid })).data, { outcome: 'known' });
+    globalThis.fetch = serve(() => Response.json({ result: tx.txid }), { ...tx, hex: txFixtures.coinbase.hex });
+    assert.equal((await rpc('tx-rebroadcast', { txid: tx.txid })).ok, false);
+    assert.equal(posted.length, 0, 'never posts a mined transaction or bytes that are another transaction');
+  } finally { globalThis.fetch = original; }
+});
+test('the indexer\'s real not-found answer keeps a manual check inconclusive and makes a spent retry a rejection', async () => {
+  const original = fetch, p = data.pending[0], missing = () => Response.json({ error: `Transaction '${p.txid}' not found` }, { status: 400 });
+  try {
+    await reset();
+    globalThis.fetch = async () => missing();
+    const checked = await rpc('check', { txid: p.txid });
+    assert.equal(checked.ok, true, checked.error); assert.equal(checked.data.pending[0].status, 'unknown');
+    await reset({ ...data, pending: [{ ...p, inputs: ['aa'.repeat(32) + ':0'] }] });
+    globalThis.fetch = async (url) => new URL(String(url)).pathname.includes('/sendtx/') ? Response.json({ error: 'bad-txns-inputs-missingorspent' }, { status: 400 }) : missing();
+    const retried = await rpc('retry', { txid: p.txid, password });
+    assert.equal(retried.ok, true, retried.error); assert.equal(retried.data.pending[0].status, 'rejected');
+    await reset();
+    globalThis.fetch = async () => Response.json({ error: `already have transaction ${p.txid}` }, { status: 400 });
+    assert.equal((await rpc('retry', { txid: p.txid, password })).data.pending[0].status, 'submitted', 'the Pearl node already has it');
+  } finally { globalThis.fetch = original; }
+});

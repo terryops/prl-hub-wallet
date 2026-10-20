@@ -200,6 +200,48 @@ main { padding: 20px 22px; }
 .peer-address { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
 .peer-address code { min-width: 0; overflow-wrap: anywhere; }
 .peer-copy { flex-shrink: 0; min-height: 28px; padding: 3px 8px; font-size: var(--font-12); }
+/* 交易记录: a row opens 交易详情; its txid has its own copy button. */
+.section-tools { display: flex; align-items: center; gap: 4px; }
+.transaction { cursor: pointer; }
+.transaction:hover .tx-open { color: var(--blue-text); }
+.tx-open { width: 28px; height: 28px; min-height: 28px; padding: 4px; margin-left: -4px; }
+.tx-open .icon { width: 16px; height: 16px; transform: rotate(-90deg); }
+.transaction > .tx-id { display: flex; align-items: center; gap: 6px; flex: 0 0 calc(100% - 38px); min-width: 0; margin: -4px 0 0 38px; }
+.transaction .tx-id small { display: inline; flex-shrink: 0; }
+.transaction .tx-id code { display: inline; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+.tx-copy { flex-shrink: 0; width: 28px; height: 28px; min-height: 28px; padding: 5px; border-color: transparent; background: transparent; color: var(--muted); }
+.tx-copy:hover { color: var(--blue-text); }
+.tx-copy .icon { width: 15px; height: 15px; }
+/* 交易详情 / 交易查询 */
+.txid-input { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: var(--font-12); }
+.tx-detail { margin-top: 4px; }
+.tx-detail-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.tx-detail-head a { font-size: var(--font-12); white-space: nowrap; }
+.tx-status { display: inline-flex; align-items: center; gap: 4px; color: var(--warn); font-size: var(--font-14); font-weight: 600; }
+.tx-status.confirmed { color: var(--green); }
+.tx-status .icon { width: 16px; height: 16px; }
+.tx-detail-id { margin: 14px 0 6px; padding: 12px; background: var(--soft); border-radius: 12px; }
+.tx-detail-id small, .tx-detail-id code { display: block; }
+.tx-detail-id button { margin-top: 8px; min-height: 32px; padding: 5px 10px; gap: 6px; font-size: var(--font-12); }
+.tx-detail-id button .icon { width: 15px; height: 15px; }
+.tx-facts { margin: 8px 0 16px; }
+.tx-net.incoming { color: var(--green); }
+.tx-failed button { min-height: 34px; }
+.tx-resend { margin: 0 0 16px; }
+.tx-resend .notice code { display: block; margin-top: 6px; color: var(--muted); }
+.tx-resend .notice p { margin: 0; }
+.tx-ok { color: var(--green); font-size: var(--font-12); margin: 0 0 8px; }
+.tx-rows { margin: 18px 0; }
+.tx-rows h3 { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; font-size: var(--font-14); }
+.tx-rows ul { list-style: none; margin: 0; padding: 0; }
+.tx-rows li { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--line); min-width: 0; }
+.tx-row-who { flex: 1; min-width: 0; }
+.tx-row-who strong { display: block; font-size: var(--font-12); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tx-row-who code, .tx-row-who small { display: block; color: var(--muted); }
+.tx-rows li.mine .tx-row-who strong { color: var(--blue-text); }
+.tx-rows li b { flex-shrink: 0; font-size: var(--font-12); font-weight: 500; font-variant-numeric: tabular-nums; text-align: right; }
+.tx-rows li.mine b { font-weight: 650; }
+.tx-more { margin-top: 8px; min-height: 32px; padding: 5px 10px; font-size: var(--font-12); }
 .contact { padding: 16px; margin: 12px 0; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); min-width: 0; }
 .contact strong, .contact small, .contact code { display: block; overflow-wrap: anywhere; }
 .contact strong { font-weight: 600; }

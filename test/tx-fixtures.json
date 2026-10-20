@@ -1,0 +1,90 @@
+{
+ "_source": "blockbook.pearlresearch.ai /api/v2/tx/<txid>, mainnet block 130692, read 2026-10-20",
+ "normal": {
+  "txid": "81a6410667c3d56af48f73cafb17e70844e82c65f76f443aa503f74864fe559f",
+  "version": 1,
+  "vin": [
+   {
+    "txid": "199a502525df11a054928182b500d746777c3654c91583b0ef3009ebb653a376",
+    "vout": 284,
+    "sequence": 4294967295,
+    "n": 0,
+    "addresses": [
+     "prl1peelteskyrgqr86zp8w5tcxru5d8kerfz8r9gyhvt3qjgcumaq5mqclxrsj"
+    ],
+    "isAddress": true,
+    "value": "3042860425"
+   }
+  ],
+  "vout": [
+   {
+    "value": "3042439163",
+    "n": 0,
+    "hex": "5120fe6af67a64b90c5fb29a541ce0870855297129bf19dc68ad93c29650828932f9",
+    "addresses": [
+     "prl1ple40v7nyhyx9lv562swwppcg255hz2dlr8wx3tvnc2t9pq5fxtus7vlqf0"
+    ],
+    "isAddress": true
+   },
+   {
+    "value": "53131",
+    "n": 1,
+    "hex": "51209ea8bb7e94c161211cea0164c99e68d2ef16d307cddcae80abca503ed810d563",
+    "addresses": [
+     "prl1pn65tkl55c9sjz882q9jvn8ng6th3d5c8ehw2aq9tefgrakqs643s9y522q"
+    ],
+    "isAddress": true
+   }
+  ],
+  "blockHash": "acbae23810c5222b2fd1aa2b1365ef6d3bbd2288c05abfbb77b54fe01bfec154",
+  "blockHeight": 130692,
+  "confirmations": 1,
+  "blockTime": 1792490389,
+  "size": 205,
+  "vsize": 154,
+  "value": "3042492294",
+  "valueIn": "3042860425",
+  "fees": "368131",
+  "hex": "0100000000010176a353b6eb0930efb08315c954367c7746d700b582819254a011df2525509a191c01000000ffffffff02fbef57b500000000225120fe6af67a64b90c5fb29a541ce0870855297129bf19dc68ad93c29650828932f98bcf0000000000002251209ea8bb7e94c161211cea0164c99e68d2ef16d307cddcae80abca503ed810d5630140e999f6a3cc85371f08a4638c3f2c6867acd2bc676da51b3c833c74ddaab604c3348c70de97591bd6f8590135662513f61cd703b43eb14f0cfe365ec6e179ab9500000000"
+ },
+ "coinbase": {
+  "txid": "3baf58c9d1e16a21dcef336b727e5932163f0b3c3ad4326f286279700aba2a65",
+  "version": 1,
+  "vin": [
+   {
+    "sequence": 4294967295,
+    "n": 0,
+    "isAddress": false,
+    "coinbase": "0384fe012f503253482f706561726c642f"
+   }
+  ],
+  "vout": [
+   {
+    "value": "223917038099",
+    "n": 0,
+    "hex": "5120b41221cce8f69e8de004d53b55fe2fc918aa66d0fd2093923155b30d25c62865",
+    "addresses": [
+     "prl1pksfzrn8g760gmcqy65a4tl30eyv25eksl5sf8y332kes6fwx9pjszgymmz"
+    ],
+    "isAddress": true
+   },
+   {
+    "value": "0",
+    "n": 1,
+    "hex": "6a24aa21a9ed5aeb500afe362150bf03face7e66694695aafbd26dfbe938c8425346bc434627",
+    "addresses": [],
+    "isAddress": false
+   }
+  ],
+  "blockHash": "acbae23810c5222b2fd1aa2b1365ef6d3bbd2288c05abfbb77b54fe01bfec154",
+  "blockHeight": 130692,
+  "confirmations": 1,
+  "blockTime": 1792490389,
+  "size": 194,
+  "vsize": 167,
+  "value": "223917038099",
+  "valueIn": "0",
+  "fees": "0",
+  "hex": "010000000001010000000000000000000000000000000000000000000000000000000000000000ffffffff110384fe012f503253482f706561726c642fffffffff0213da7e2234000000225120b41221cce8f69e8de004d53b55fe2fc918aa66d0fd2093923155b30d25c628650000000000000000266a24aa21a9ed5aeb500afe362150bf03face7e66694695aafbd26dfbe938c8425346bc4346270120000000000000000000000000000000000000000000000000000000000000000000000000"
+ }
+}

@@ -25,6 +25,6 @@ export function hashrate24h(s?: Stats) {
 export const dailyAverage = (h24: number, d7: number) => d7 > 0 ? d7 / (h24 > 0 ? Math.min(7, Math.max(1, d7 / h24)) : 7) : h24;
 /// SpeedWindow.nearest: ties choose the fresher published window.
 export function nearestWindow(selected: WindowName, available: WindowName[] = []): WindowName {
-  const order: WindowName[] = ["live", "m15", "m30", "hour", "h3", "day"], mine = Math.max(0, order.indexOf(selected));
+  const order: WindowName[] = ["live", "m15", "m30", "hour", "h3", "h6", "day"], mine = Math.max(0, order.indexOf(selected));
   return [...available].sort((a, b) => Math.abs(order.indexOf(a) - mine) - Math.abs(order.indexOf(b) - mine) || order.indexOf(a) - order.indexOf(b))[0] || "day";
 }

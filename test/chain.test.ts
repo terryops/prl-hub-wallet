@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { loadAccount, mergeUTXOs, transactionPeer, estimateFee } from "../src/chain.ts";
+import { loadAccount, mergeUTXOs, transactionPeer, estimateFee, chooseFeePerKB, notFound, alreadyKnown, ChainError, request } from "../src/chain.ts";
 import { derived, planTransaction, signTransaction } from "../src/wallet.ts";
 const vectors = JSON.parse(readFileSync(new URL("./native-vectors.json", import.meta.url), "utf8"));
 test("counterparty uses largest external output, ignores change/self sends and shows receipt source", () => {
@@ -145,16 +145,69 @@ test("testnet indexer paths use coin type 1 and still verify against the derived
     await assert.rejects(loadAccount(vectors.xpub, "mainnet", "test", []), /地址路径无效/, "mainnet keeps the exact coin type");
   } finally { globalThis.fetch = original; }
 });
-test("invalid fee estimates fail so the caller can label the fallback correctly", async () => {
+test("invalid fee estimates fall back to the default rate and say it is not an estimate", async () => {
   const original = fetch;
   try {
     for (const result of [-1, "-1", "NaN", "", null, false, {}, undefined]) {
       globalThis.fetch = async () => Response.json({ result });
-      await assert.rejects(estimateFee("mainnet"), /手续费/);
+      assert.deepEqual(await estimateFee("mainnet"), { fee: 50000, estimated: false });
     }
+    globalThis.fetch = async () => { throw new Error("offline"); };
+    assert.deepEqual(await estimateFee("mainnet"), { fee: 50000, estimated: false });
     globalThis.fetch = async () => Response.json({ result: "0.0005" });
-    assert.equal(await estimateFee("mainnet"), 50000);
+    assert.deepEqual(await estimateFee("mainnet"), { fee: 50000, estimated: true });
   } finally { globalThis.fetch = original; }
+});
+// The official indexer's answers on 2026-10-20 (tip 130692): its 2-block estimate asked ~1,955 sat/vB
+// while recent blocks took 1–81 sat/vB. Blocks with only a coinbase have no fee statistics.
+const feeDay = (overrides: Record<string, unknown> = {}) => async (url: string | URL | Request) => {
+  const p = new URL(String(url)).pathname;
+  const answers: Record<string, unknown> = {
+    "/api/v1/estimatefee/2": { result: "0.01954566" }, "/api/v1/estimatefee/6": { result: "0.00001708" },
+    "/api/v2/": { blockbook: { bestHeight: 130692 } },
+    "/api/v2/feestats/130690": { txCount: 8, decilesFeePerKb: [1005, 1005, 1007, 1008, 3000, 50218, 50218, 2384097, 2386245, 2386648, 2386648] },
+    "/api/v2/feestats/130692": { txCount: 60, decilesFeePerKb: [1003, 2014, 81441, 81441, 81441, 81441, 81441, 81441, 81441, 81441, 2390461] },
+    ...overrides,
+  };
+  if (p in answers) return answers[p] instanceof Response ? answers[p] as Response : Response.json(answers[p]);
+  if (p.startsWith("/api/v2/feestats/")) return Response.json({ txCount: 0, decilesFeePerKb: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] });
+  throw new Error("unexpected " + p);
+};
+test("a skewed 2-block estimate is capped by the 6-block estimate and recent blocks' median fees", async () => {
+  const original = fetch;
+  try {
+    globalThis.fetch = feeDay() as typeof fetch;
+    // Was 1,954,566 per kB (about 0.003 PRL for a 154-vbyte payment, 24 times this); now the busiest recent block's median.
+    assert.deepEqual(await estimateFee("mainnet"), { fee: 81441, estimated: true });
+    globalThis.fetch = feeDay({ "/api/v2/": { error: "down" } }) as typeof fetch;
+    assert.deepEqual(await estimateFee("mainnet"), { fee: 1708, estimated: true }, "no block statistics: the 6-block estimate caps");
+    globalThis.fetch = feeDay({ "/api/v1/estimatefee/2": { result: "-1" } }) as typeof fetch;
+    assert.deepEqual(await estimateFee("mainnet"), { fee: 81441, estimated: true }, "no 2-block estimate: the cap is the rate");
+    globalThis.fetch = feeDay({ "/api/v2/feestats/130692": { txCount: 60, decilesFeePerKb: [1, 2, 3] }, "/api/v2/feestats/130690": new Response("busy", { status: 503 }) }) as typeof fetch;
+    assert.deepEqual(await estimateFee("mainnet"), { fee: 1708, estimated: true }, "malformed or failed statistics are skipped");
+  } finally { globalThis.fetch = original; }
+});
+test("fee choice: the cap, the fallback and the relay floor and ceiling", () => {
+  assert.equal(chooseFeePerKB(1954566, 1708, [50218, 81441]), 81441);
+  assert.equal(chooseFeePerKB(20000, 1708, [50218]), 20000, "an estimate below the cap stands");
+  assert.equal(chooseFeePerKB(20000, null, []), 20000, "nothing to cap with");
+  assert.equal(chooseFeePerKB(null, null, []), 50000);
+  assert.equal(chooseFeePerKB(null, 3000, []), 3000);
+  assert.equal(chooseFeePerKB(500, null, []), 1000);
+  assert.equal(chooseFeePerKB(99999999, 99999999, []), 10000000);
+});
+test("the indexer's real not-found answer is recognised; already-known replies of Pearl and Core nodes too", async () => {
+  const original = fetch;
+  try {
+    globalThis.fetch = async () => Response.json({ error: `Transaction '${"ab".repeat(32)}' not found` }, { status: 400 });
+    const e = await request("mainnet", "/api/v2/tx/" + "ab".repeat(32)).catch((e) => e);
+    assert.ok(e instanceof ChainError); assert.equal(notFound(e), true);
+    assert.equal(notFound(new ChainError("Transaction not found", 404)), true);
+    assert.equal(notFound(new ChainError("not found", 503)), false);
+    assert.equal(notFound(new Error("not found")), false);
+  } finally { globalThis.fetch = original; }
+  for (const m of ["already have transaction 00ff", "-27: transaction already exists", "txn-already-in-mempool", "txn-already-known", "Transaction already in block chain", "-25: already in the mempool"]) assert.equal(alreadyKnown(m), true, m);
+  for (const m of ["-26: min relay fee not met", "bad-txns-inputs-missingorspent", ""]) assert.equal(alreadyKnown(m), false, m);
 });
 test("a full change scan over more spends than a call accepts as arguments still reports the scan height", async () => {
   // 1,500 indexer pages of 100 spends: Math.max(...spends) overflows the engine's argument limit.

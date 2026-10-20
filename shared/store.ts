@@ -23,6 +23,7 @@ export const pools = [
   "Pearl Fortune",
   "PearlHash",
   "Kryptex",
+  "Jetski",
   "F2Pool",
 ];
 export const alive = <T extends Item>(items: T[]) =>
@@ -155,7 +156,7 @@ function readKey(key: string): State {
       accountId: key !== KEY && typeof o.accountId === "string" ? o.accountId : "",
       token: typeof o.token === "string" ? o.token : "",
       sync: key !== KEY && o.sync === true,
-      ...(o.palette == null ? {} : { palette: o.palette }), ...(o.hashWindow == null ? {} : { hashWindow: o.hashWindow }), ...(o.onlineOnly == null ? {} : { onlineOnly: o.onlineOnly }), ...(o.hideExtensionBanner == null ? {} : { hideExtensionBanner: o.hideExtensionBanner }),
+      ...(o.palette == null ? {} : { palette: o.palette }), ...(o.hashWindow == null ? {} : { hashWindow: o.hashWindow }), ...(o.onlineOnly == null ? {} : { onlineOnly: o.onlineOnly }), ...(o.monitorLayout === "compact" ? { monitorLayout: "compact" } : {}), ...(o.hideExtensionBanner == null ? {} : { hideExtensionBanner: o.hideExtensionBanner }),
     };
     if (o.version === 1) {
       // Recover each section independently without retaining obsolete login secrets.

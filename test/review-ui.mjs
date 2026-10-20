@@ -53,7 +53,8 @@ try {
     globalThis.fetch = async (...args) => {
       if (new URL(String(args[0])).pathname.includes("/estimatefee/") && fixture.holdFee) {
         fixture.feeStarted = true;
-        await new Promise((resolve) => { fixture.releaseFee = () => { fixture.holdFee = false; resolve(); }; });
+        // The estimate asks for the 2- and 6-block rates at once: one release lets every held request go.
+        await new Promise((resolve) => { const earlier = fixture.releaseFee; fixture.releaseFee = () => { fixture.holdFee = false; earlier?.(); resolve(); }; });
       }
       return original(...args);
     };

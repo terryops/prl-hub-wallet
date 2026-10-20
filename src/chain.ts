@@ -17,8 +17,13 @@ export class ChainError extends Error {
   status: number;
   constructor(message: string, status: number) { super(message); this.status = status; }
 }
-export async function request<T>(network: Network, path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(origin(network) + path, { ...init, signal: AbortSignal.timeout(25000), cache: "no-store", credentials: "omit", redirect: "error" });
+/// The indexer doesn't know this transaction: Blockbook answers 400 {"error":"Transaction '<txid>' not found"}.
+export const notFound = (e: unknown) => e instanceof ChainError && (e.status === 400 || e.status === 404) && /not found/i.test(e.message);
+/// A node already has this transaction (mempool or chain): Pearl's node says "already have transaction" or
+/// "transaction already exists", Bitcoin Core-style nodes "txn-already-…" or "already in block chain".
+export const alreadyKnown = (message: string) => /already.*(known|block chain|mempool)|already (have|exists)|txn-already/i.test(message);
+export async function request<T>(network: Network, path: string, init?: RequestInit, timeout = 25000): Promise<T> {
+  const response = await fetch(origin(network) + path, { ...init, signal: AbortSignal.timeout(timeout), cache: "no-store", credentials: "omit", redirect: "error" });
   const body = await response.text();
   if (body.length > 12000000) throw new Error("链上响应过大，请稍后重试。");
   let data;
@@ -137,10 +142,50 @@ export async function loadAccount(publicKey: string, network: Network, walletId:
     scanHeight: spent.reduce((height, tx) => (tx.confirmations || 0) > 0 ? Math.max(height, tx.blockHeight || 0) : height, options.fromHeight || 0), time: Date.now()
   };
 }
-export async function estimateFee(network: Network) {
-  const data = await request<{ result: unknown }>(network, "/api/v1/estimatefee/2");
-  if ((typeof data.result !== "string" && typeof data.result !== "number") || typeof data.result === "string" && !data.result.trim()) throw new Error("手续费率超出范围。");
-  const value = Number(data.result);
-  if (!Number.isFinite(value) || value <= 0) throw new Error("手续费率超出范围。");
-  return Math.min(10000000, Math.max(1000, Math.floor(value * 100000000)));
+// Fee rates are in atomic units per 1000 vbytes, as in the native app (BlockbookClient.estimateFeePerKB).
+// Floor ~1 sat/vB (the relay minimum); the ceiling guards against an absurd indexer value.
+export const FEE_MIN = 1000, FEE_MAX = 10000000, FEE_FALLBACK = 50000;
+/// The node's estimate for confirming within `blocks` blocks (Blockbook returns PRL/kB); null when the
+/// request fails or the node can't estimate (its "-1" sentinel).
+export async function nodeFeeEstimate(network: Network, blocks: number): Promise<number | null> {
+  try {
+    const data = await request<{ result: unknown }>(network, `/api/v1/estimatefee/${blocks}`, undefined, 10000);
+    if ((typeof data.result !== "string" && typeof data.result !== "number") || typeof data.result === "string" && !data.result.trim()) return null;
+    const value = Number(data.result);
+    // 1 PRL/kB is already ten times the ceiling.
+    return Number.isFinite(value) && value > 0 ? Math.floor(Math.min(value, 1) * 100000000) : null;
+  } catch { return null; }
+}
+/// The median fee rate of each of the last `count` blocks that had transactions besides the coinbase
+/// (`/feestats/` is ~150 bytes a block). Empty when the tip or every block's stats couldn't be read.
+export async function recentBlockMedianFees(network: Network, count = 6): Promise<number[]> {
+  let tip: unknown;
+  try { tip = (await request<{ blockbook?: { bestHeight?: unknown } }>(network, "/api/v2/", undefined, 10000)).blockbook?.bestHeight; } catch { return []; }
+  if (typeof tip !== "number" || !Number.isSafeInteger(tip) || tip <= 0) return [];
+  const heights = Array.from({ length: Math.min(count, tip) }, (_, i) => tip - i);
+  const medians = await Promise.all(heights.map(async (height) => {
+    try {
+      const stats = await request<{ txCount?: unknown; decilesFeePerKb?: unknown }>(network, `/api/v2/feestats/${height}`, undefined, 10000);
+      if (typeof stats.txCount !== "number" || stats.txCount <= 0 || !Array.isArray(stats.decilesFeePerKb) || stats.decilesFeePerKb.length !== 11) return null;
+      const median = Number(stats.decilesFeePerKb[5]);
+      return Number.isFinite(median) && median > 0 ? Math.floor(median) : null;
+    } catch { return null; }
+  }));
+  return medians.filter((median): median is number => median != null);
+}
+/// The node's 2-block estimate is the default, but it can sit far above what blocks actually take: on
+/// 2026-10-20 the official node asked ~1,955 sat/vB while every recent block was including 1 sat/vB
+/// transactions (its estimator was skewed by a mempool still holding transactions mined hours earlier).
+/// So it is capped at the higher of the 6-block estimate and recent blocks' median fee; real congestion
+/// raises both, a skewed estimator doesn't. Same rule as the native app.
+export function chooseFeePerKB(fast: number | null, slow: number | null, recentMedians: number[]) {
+  const cap = Math.max(slow ?? 0, ...recentMedians.slice(0, 64), 0);
+  const rate = fast != null ? (cap > 0 ? Math.min(fast, cap) : fast) : cap > 0 ? cap : FEE_FALLBACK;
+  return Math.min(FEE_MAX, Math.max(FEE_MIN, rate));
+}
+/// The fee rate for a send. Never fails: `estimated` is false only when nothing at all could be learned
+/// about fees and the default rate is used.
+export async function estimateFee(network: Network): Promise<{ fee: number; estimated: boolean }> {
+  const [fast, slow, medians] = await Promise.all([nodeFeeEstimate(network, 2), nodeFeeEstimate(network, 6), recentBlockMedianFees(network)]);
+  return { fee: chooseFeePerKB(fast, slow, medians), estimated: fast != null || slow != null || medians.length > 0 };
 }
