@@ -106,10 +106,8 @@
   "预览转账": "Vorschau anzeigen",
   "已广播，等待链上确认。": "Gesendet. Warten auf On-Chain-Bestätigung.",
   "广播结果待核对，请查看待确认转账。不要重复创建付款。": "Der Broadcast-Status ist unbekannt. Prüfen Sie die ausstehenden Transfers. Erstellen Sie keine weitere Zahlung.",
-  "PRL 主网": "PRL-Mainnet",
   "PRL 测试网": "PRL-Testnet",
   "手续费": "Gebühr",
-  "合计支出": "Gesamtausgaben",
   "返回自己的找零": "Wechselgeld an Sie zurück",
   "预览在 3 分钟后失效。确认时在本机签名，再发送已签名交易。": "Die Vorschau läuft in 3 Minuten ab. Beim Bestätigen wird auf diesem Gerät signiert und dann die signierte Transaktion gesendet.",
   "再次输入密码确认": "Geben Sie das Passwort zur Bestätigung erneut ein",
@@ -259,5 +257,14 @@
   "网络中已有这笔交易。": "Das Netzwerk kennt diese Transaktion bereits.",
   "网络拒绝了这笔交易：": "Das Netzwerk hat diese Transaktion abgelehnt:",
   "网络没有回应，无法确定交易是否已发出。可以先查询，或再广播一次：同一笔交易重复广播是安全的。": "Keine Antwort vom Netzwerk, daher ist unklar, ob die Transaktion raus ist. Suchen Sie sie oder senden Sie sie erneut: Dieselbe Transaktion zweimal zu senden ist unbedenklich.",
-  "正在广播…": "Wird gesendet…"
+  "正在广播…": "Wird gesendet…",
+  "收款信息": "Empfänger",
+  "金额": "Betrag",
+  "发送": "Senden",
+  "合计": "Gesamt",
+  "网络": "Netzwerk",
+  "发送至 {name}": "Senden an {name}",
+  "在本机签名，上链后不可撤销": "Auf diesem Gerät signiert · on-chain endgültig",
+  "确认发送 {amount} PRL": "Senden von {amount} PRL bestätigen",
+  "本笔手续费明显高于平常，请确认。": "Diese Gebühr ist deutlich höher als üblich – bitte prüfe sie noch einmal."
 }

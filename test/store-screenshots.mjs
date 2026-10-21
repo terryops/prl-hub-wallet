@@ -43,7 +43,7 @@ try {
     await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
     await button("地址簿").click(); await page.locator(".contact").waitFor(); await capture(lang, "contacts");
     await button("↑ 转账").click(); await page.getByLabel(texts["地址簿"], { exact: true }).selectOption(vectors.cases[0].to);
-    await page.getByLabel(texts["转账金额"], { exact: true }).fill("1"); await button("预览转账").click(); await button("确认并发送").waitFor(); await capture(lang, "send-preview"); await button("关闭").click();
+    await page.getByLabel(texts["转账金额"], { exact: true }).fill("1"); await button("预览转账").click(); await page.getByRole("button", { name: texts["确认发送 {amount} PRL"].replace("{amount}", "1"), exact: true }).waitFor(); await capture(lang, "send-preview"); await button("关闭").click();
     await button("支持开发者").click(); await page.getByRole("button", { name: "5 PRL", exact: true }).click(); await button("确认捐赠").waitFor(); await capture(lang, "donation-preview"); await button("关闭").click();
   }
   // Chrome Web Store also needs a 440×280 promotional image. Reuse the shipped

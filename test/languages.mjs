@@ -71,13 +71,13 @@ try {
     await button(l,'↓ 收款').click();await page.getByAltText(texts[l]['收款地址二维码']).waitFor();
     assert.equal(await page.locator('.receive code').textContent(),vectors.addresses[0]);await fits(`${l}: receive`);await button(l,'关闭').click();
     await button(l,'↑ 转账').click();await page.getByLabel(texts[l]['地址簿'],{exact:true}).selectOption(vectors.cases[0].to);
-    await page.getByLabel(texts[l]['转账金额'],{exact:true}).fill('1');await button(l,'预览转账').click();await button(l,'确认并发送').waitFor();await fits(`${l}: review`);
+    await page.getByLabel(texts[l]['转账金额'],{exact:true}).fill('1');await button(l,'预览转账').click();await page.getByRole('button',{name:texts[l]['确认发送 {amount} PRL'].replace('{amount}','1'),exact:true}).waitFor();await fits(`${l}: review`);
     assert.ok((await page.locator('dialog').innerText()).includes(texts[l]['预览在 3 分钟后失效。确认时在本机签名，再发送已签名交易。']));
     if(l==='ru')await page.screenshot({path:`${output}/extension-ru-send-320.png`,fullPage:true});
     await button(l,'关闭').click();
     await button(l,'支持开发者').click();
     await page.getByRole('button',{name:'5 PRL',exact:true}).click();await button(l,'确认捐赠').waitFor();await fits(`${l}: donation`);
-    assert.equal(await page.locator('dialog .donation-address span').count(),2);assert.equal(await page.locator('dialog .fiat').count(),0);
+    assert.equal(await page.locator('dialog .grouped-address span').count(),16);assert.equal(await page.locator('dialog .fiat').count(),0);
     for (const theme of ['light','dark']) {await page.emulateMedia({colorScheme:theme});await fits(`${l}: donation ${theme}`);}
     await page.screenshot({path:`${output}/${l}-donation-320.png`,fullPage:true});await button(l,'关闭').click();
     assert.equal(await page.locator('.web-links a').count(),2);

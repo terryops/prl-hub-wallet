@@ -103,14 +103,14 @@ try {
   await page.getByLabel("收款地址", { exact: true }).fill(vectors.cases[0].to);
   await page.getByLabel("转账金额", { exact: true }).fill("1");
   await page.getByRole("button", { name: "预览转账" }).click();
-  await page.getByRole("button", { name: "确认并发送" }).waitFor();
+  await page.getByRole("button", { name: /^确认发送 .+ PRL$/ }).waitFor();
   await page.screenshot({ path: output + "/send-preview.png", fullPage: true });
   await page.getByLabel("再次输入密码确认", { exact: true }).fill("wrong-password");
-  await page.getByRole("button", { name: "确认并发送" }).click();
+  await page.getByRole("button", { name: /^确认发送 .+ PRL$/ }).click();
   await page.getByRole("status").filter({ hasText: "密码错误" }).waitFor();
   assert.equal(await worker.evaluate(() => fixture.broadcasts.length), 0);
   await page.getByLabel("再次输入密码确认", { exact: true }).fill("public-test-password");
-  await page.getByRole("button", { name: "确认并发送" }).click();
+  await page.getByRole("button", { name: /^确认发送 .+ PRL$/ }).click();
   await page.getByRole("button", { name: "重试原交易" }).waitFor();
   const sent = (await rpc("status")).data.pending[0];
   assert.equal(sent.status, "unknown");

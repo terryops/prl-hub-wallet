@@ -116,8 +116,8 @@ try {
   assert.equal((await rpc("status")).data.pending.length, 0);
   assert.equal(await worker.evaluate(() => fixture.broadcasts), 2, "one post to each mainnet indexer");
   await button("↑ 转账").click(); await page.getByLabel("收款地址", { exact: true }).fill(vectors.cases[0].to);
-  await page.getByLabel("转账金额", { exact: true }).fill("0.1"); await button("预览转账").click(); await button("确认并发送").waitFor();
-  await page.getByLabel("再次输入密码确认", { exact: true }).fill("public-test-password"); await button("确认并发送").click();
+  await page.getByLabel("转账金额", { exact: true }).fill("0.1"); await button("预览转账").click(); await button("确认发送 0.1 PRL").waitFor();
+  await page.getByLabel("再次输入密码确认", { exact: true }).fill("public-test-password"); await button("确认发送 0.1 PRL").click();
   await page.getByRole("status").filter({ hasText: "节点拒绝了此交易" }).waitFor();
   assert.doesNotMatch(await page.getByRole("status").innerText(), /广播结果待核对/);
   assert.equal((await rpc("status")).data.pending[0].status, "rejected");

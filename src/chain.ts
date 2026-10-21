@@ -1,20 +1,18 @@
 import { addressMap, accountPath, derived, outpoint, isAddress, registerAddressPath, type Network, type UTXO } from "./wallet.ts";
-// Defined per module (not imported) so the Chrome build folds it even across shared chunks.
-declare const __PEARL_ANDROID__: boolean | undefined;
-const ANDROID = typeof __PEARL_ANDROID__ !== "undefined" && __PEARL_ANDROID__ === true;
 // Blockbook indexers, as in the native app (prl-hub Sources/WalletKit/BlockbookClient.swift). Mainnet has
 // two: Pearl Hub's own, behind prl-hub/node-gateway (which refuses reads with a 503 while it lags), and
 // Pearl's official one. Reads try them in order and one refresh reads from one index only; broadcasts and
 // transaction lookups ask both. On 2026-10-20 the official indexer kept showing a block's transactions as
 // unconfirmed for hours, which no "is it reachable" failover catches, hence a second, independent index.
-// The Android build reads through its app shell, which proxies only the official indexer.
+// The Android build uses both too: it runs at https://pearlhub.net inside the app, where our own index is
+// same-origin, and its shell proxies the official one, which sends no CORS headers (prl-hub-android BRIDGE.md).
 export const OWN_MAINNET = "https://pearlhub.net/node", OFFICIAL_MAINNET = "https://blockbook.pearlresearch.ai", OFFICIAL_TESTNET = "https://blockbook.testnet.pearlresearch.ai";
 /// Lets the wallet through the gateway (EXTENSION_KEYS in prl-hub/node-gateway/wrangler.toml). Not a secret:
 /// it is in this public source. It keeps the wallet's traffic apart from the native app's, and removing it
 /// there moves this version back to the official indexer.
 export const NODE_KEY = "212e47a59f6f1f1e4a98b50428700972391dd55cee237080";
 /// The indexers of `network`, in order of preference.
-export const indexers = (network: Network) => network === "testnet" ? [OFFICIAL_TESTNET] : ANDROID ? [OFFICIAL_MAINNET] : [OWN_MAINNET, OFFICIAL_MAINNET];
+export const indexers = (network: Network) => network === "testnet" ? [OFFICIAL_TESTNET] : [OWN_MAINNET, OFFICIAL_MAINNET];
 /// `base` first, then the others; `strict`: `base` only, for the reads of one refresh, which must not mix
 /// two indexes that may disagree. An indexer this network doesn't have changes nothing.
 export function pinned(network: Network, base: string | undefined, strict = false) {

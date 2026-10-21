@@ -106,10 +106,8 @@
   "预览转账": "Preview transfer",
   "已广播，等待链上确认。": "Broadcast. Awaiting on-chain confirmation.",
   "广播结果待核对，请查看待确认转账。不要重复创建付款。": "Broadcast status is unknown. Check pending transfers. Do not create another payment.",
-  "PRL 主网": "PRL Mainnet",
   "PRL 测试网": "PRL Testnet",
   "手续费": "Network fee",
-  "合计支出": "Total spent",
   "返回自己的找零": "Change returned to you",
   "预览在 3 分钟后失效。确认时在本机签名，再发送已签名交易。": "The preview expires in 3 minutes. Confirmation signs on this device, then sends the signed transaction.",
   "再次输入密码确认": "Re-enter password to confirm",
@@ -259,5 +257,14 @@
   "网络中已有这笔交易。": "The network already has this transaction.",
   "网络拒绝了这笔交易：": "The network refused this transaction:",
   "网络没有回应，无法确定交易是否已发出。可以先查询，或再广播一次：同一笔交易重复广播是安全的。": "No answer from the network, so it isn’t known whether the transaction went out. Look it up, or broadcast it again: sending the same transaction twice is safe.",
-  "正在广播…": "Broadcasting…"
+  "正在广播…": "Broadcasting…",
+  "收款信息": "Destination",
+  "金额": "Amount",
+  "发送": "Send",
+  "合计": "Total",
+  "网络": "Network",
+  "发送至 {name}": "Send to {name}",
+  "在本机签名，上链后不可撤销": "Signed on this device · final once on-chain",
+  "确认发送 {amount} PRL": "Confirm Send {amount} PRL",
+  "本笔手续费明显高于平常，请确认。": "This fee is much higher than usual — please double-check."
 }

@@ -259,7 +259,7 @@ footer { text-align: center; color: var(--muted); font-size: var(--font-12); mar
 .notice { background: var(--soft); color: var(--text); padding: 13px; border: 1px solid var(--line); border-radius: 12px; font-size: var(--font-12); margin: 16px 0; }
 dialog { background: var(--surface); color: var(--text); border: 1px solid var(--line); border-radius: 22px; padding: 0; width: calc(100% - 24px); max-width: 500px; max-height: calc(100dvh - 32px); box-shadow: none; }
 dialog::backdrop { background: #121a3670; }
-.dialog-inner { padding: 24px; }
+.dialog-inner { --dialog-pad-x: 24px; padding: 24px; }
 .dialog-title { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 20px; }
 .dialog-title h2 { margin: 0; }
 .dialog-title button { color: var(--muted); }
@@ -288,9 +288,41 @@ dialog .message { border: 0; border-radius: 10px; margin: 0 0 18px; }
 .input-action { display: flex; gap: 8px; }
 .input-action input { flex: 1; }
 .input-action button { white-space: nowrap; font-size: var(--font-12); }
-.review-amount { font-size: var(--font-28); font-weight: 650; letter-spacing: -1px; font-variant-numeric: tabular-nums; margin: 18px 0; overflow-wrap: anywhere; }
-.review-amount small { font-size: var(--font-12); font-weight: 400; margin-left: 10px; letter-spacing: 0; }
-.network-tag { display: inline-block; color: var(--blue-text); background: var(--selected); border-radius: 6px; padding: 5px 8px; margin: 0 0 8px; font-size: var(--font-12); }
+/* 确认转账 as a receipt, like the native app's (prl-hub SendConfirmSheet.swift / PearlReceipt.swift). */
+.receipt-hero { display: flex; flex-direction: column; align-items: center; gap: 4px; text-align: center; margin: 0 0 20px; }
+.receipt-badge { display: grid; place-items: center; width: 52px; height: 52px; margin-bottom: 6px; border-radius: 16px; background: var(--selected); color: var(--blue-text); }
+.receipt-badge .icon { width: 26px; height: 26px; }
+.review-amount { display: flex; align-items: baseline; justify-content: center; gap: 6px; max-width: 100%; font-size: clamp(28px, 9vw, 40px); font-weight: 700; letter-spacing: -1px; line-height: 1.2; font-variant-numeric: tabular-nums; }
+.review-amount span { min-width: 0; overflow-wrap: anywhere; }
+.review-amount small { font-size: var(--font-16); font-weight: 600; letter-spacing: 0; }
+.receipt-payee { display: flex; align-items: center; gap: 6px; max-width: 100%; margin: 0; color: var(--muted); font-size: var(--font-14); font-weight: 500; }
+.receipt-payee span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.receipt-payee .icon { width: 18px; height: 18px; }
+.fee-warning { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 18px; padding: 12px 14px; border: 1px solid var(--warning-line); border-radius: 12px; background: var(--warning-bg); color: var(--warn); font-size: var(--font-13); font-weight: 550; }
+.fee-warning .icon { width: 18px; height: 18px; margin-top: 2px; }
+.receipt-section { margin: 0 0 18px; }
+.receipt-section h3 { margin: 0 0 6px 4px; color: var(--muted); font-size: var(--font-13); font-weight: 600; }
+.receipt-card { padding: 0 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--soft); }
+.receipt-card > * + * { border-top: 1px solid var(--line); }
+.receipt-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 12px 0; font-size: var(--font-14); }
+.receipt-row > :first-child { color: var(--muted); }
+.receipt-row > :last-child { min-width: 0; text-align: right; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.receipt-row.high > :last-child { color: var(--warn); font-weight: 600; }
+.receipt-row.total > :first-child { color: var(--text); font-weight: 600; }
+.receipt-row.total > :last-child { font-size: var(--font-20); font-weight: 700; }
+.receipt-address { padding: 6px 0 12px; }
+.receipt-address-label { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: var(--font-14); }
+.receipt-address-label .icon-button { margin-right: -8px; }
+/* Lines break only between the 4-character groups; the gaps are margins, so a copy has no spaces. */
+.grouped-address { display: block; font-size: var(--font-16); line-height: 1.75; user-select: all; overflow-wrap: normal; }
+.grouped-address span { display: inline-block; margin-right: .6ch; color: var(--muted); }
+.grouped-address span.edge { color: var(--text); font-weight: 700; }
+.receipt-change { display: flex; justify-content: space-between; gap: 12px; margin: 6px 4px 0; color: var(--muted); font-size: var(--font-12); font-variant-numeric: tabular-nums; }
+.receipt-info { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; color: var(--muted); font-size: var(--font-13); }
+.receipt-info .icon { width: 18px; height: 18px; color: var(--blue-text); }
+/* The confirm button stays in view at the bottom of the dialog while the receipt scrolls. */
+.receipt-actions { position: sticky; bottom: 0; z-index: 1; margin: 4px calc(-1 * var(--dialog-pad-x)) 0; padding: 14px var(--dialog-pad-x) 8px; background: linear-gradient(to bottom, transparent, var(--surface) 14px); }
+.receipt-actions .wide { margin: 0; }
 dl { margin: 18px 0 20px; }
 dl > div { display: flex; justify-content: space-between; gap: 12px; font-size: var(--font-14); padding: 12px 0; border-bottom: 1px solid var(--line); }
 dt { color: var(--muted); }
@@ -315,8 +347,8 @@ dd { min-width: 0; margin: 0; text-align: right; overflow-wrap: anywhere; font-v
 .donation-intro { text-align: center; margin: 20px 0; }
 .donation-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .donation-presets button { padding: 12px 4px; }
-.donation-address, .address-halves { display: block; font-size: clamp(10px, 3vw, 12px); line-height: 1.7; hyphens: none; word-break: normal; overflow-wrap: normal; user-select: all; }
-.donation-address span, .address-halves span { display: block; white-space: nowrap; }
+.donation-address { display: block; font-size: clamp(10px, 3vw, 12px); line-height: 1.7; hyphens: none; word-break: normal; overflow-wrap: normal; user-select: all; }
+.donation-address span { display: block; white-space: nowrap; }
 .web-links { display: grid; gap: 12px; padding: 18px 0 0; margin-top: 12px; border-top: 1px solid var(--line); font-size: var(--font-12); overflow-wrap: anywhere; }
 .web-links a { display: block; }
 .web-links small { font-size: var(--font-12); }
@@ -325,7 +357,7 @@ dd { min-width: 0; margin: 0; text-align: right; overflow-wrap: anywhere; font-v
 @media (max-width: 640px) {
   .address-card, .pending, .contact, .empty { border-radius: 16px; }
   dialog { width: 100%; max-width: none; max-height: 90dvh; margin: auto 0 0; border-radius: 20px 20px 0 0; border-bottom: 0; }
-  .dialog-inner { padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); }
+  .dialog-inner { --dialog-pad-x: 16px; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); }
 }
 /* Below this width a translated label ("Заблокировать", "Verrouiller") squeezed the brand to "Pe…". */
 @media (max-width: 439px) {

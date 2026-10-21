@@ -13,7 +13,7 @@ prl-hub-wallet/  本仓库
 
 ## 安装开发测试版
 
-1. 解压 `pearl-hub-wallet-0.1.5.zip` 到固定目录。
+1. 解压 `pearl-hub-wallet-0.1.6.zip` 到固定目录。
 2. 打开 Chrome 的「扩展程序 → 管理扩展程序」，开启「开发者模式」。
 3. 点击「加载已解压的扩展程序」，选择解压后的目录。仓库内也可以直接选择 `dist/`。
 4. 将 PRL Wallet 固定到工具栏，点击图标打开侧边栏；右上角 ↗ 可打开完整页面。
@@ -31,7 +31,7 @@ prl-hub-wallet/  本仓库
 - 最多 10 个钱包：切换、改名、查看助记词、移除，更换统一解锁密码。
 - 主网／测试网，地址校验、收款二维码、复制和轮换收款地址。
 - 读取钱包 UTXO、余额、交易历史和分页，汇总找零地址并去重。
-- 本机转账预览、签名、广播，支持全部已确认可用余额。
+- 本机转账预览、签名、广播，支持全部已确认可用余额。确认页是回执样式（同原生 App）：大号金额与联系人名、按 4 位分组的收款地址、发送 + 网络手续费 = 合计，手续费超过 0.005 PRL 时单独警告。
 - 交易详情（状态、确认数、区块、手续费、本钱包净收支、输入输出，未确认时可重新广播）和交易查询（输入交易 ID 或区块浏览器链接）。
 - 手续费率取 2 区块估算，并以「6 区块估算」和「最近 12 个区块各自第 10 百分位手续费的中间值」中较高者为上限（同原生 App）。
 - 主网先查 Pearl Hub 自建的区块索引，官方索引兜底；一次刷新只读一个索引，广播和交易查询两边都发（同原生 App）。
@@ -48,7 +48,7 @@ prl-hub-wallet/  本仓库
 
 仅申请 storage、alarms、sidePanel、identity、两个 Blockbook 主机权限及 `https://pearlhub.net/*`（自建区块索引 `pearlhub.net/node`、公开行情及可选账号通讯录同步）权限。没有内容脚本、网站钱包连接接口、任意网址代理或 Chrome 账号同步私钥功能。所有脚本随插件打包，不加载远程代码。
 
-主网链上查询先发给自建区块索引 `pearlhub.net/node`，它不可用或数据落后时改用官方 Blockbook；测试网只用官方测试网 Blockbook（Android 版目前也只用官方的）。查询发送账户扩展公钥、地址和交易编号；付款时已签名交易同时发给两边，不发送助记词或私钥。插件从 `https://pearlhub.net/v1/price` 和 `/v1/fx` 只取公开行情，不发送钱包地址、账户公钥、认证信息或 Cookie；行情失败不影响钱包。同一主机权限及 CSP `connect-src` 也支持账号登录和 GET/PUT `/v1/account/config`，请求使用可撤销的短期登录凭据。不含矿池、Pro 或提醒模块。隐私说明见 `public/privacy.html`。
+主网链上查询先发给自建区块索引 `pearlhub.net/node`，它不可用或数据落后时改用官方 Blockbook；测试网只用官方测试网 Blockbook。Android App 里的钱包也先查自建索引（钱包页面在 App 里就是 `https://pearlhub.net`，与 `/node` 同源），官方索引仍由 App 外壳代发。查询发送账户扩展公钥、地址和交易编号；付款时已签名交易同时发给两边，不发送助记词或私钥。插件从 `https://pearlhub.net/v1/price` 和 `/v1/fx` 只取公开行情，不发送钱包地址、账户公钥、认证信息或 Cookie；行情失败不影响钱包。同一主机权限及 CSP `connect-src` 也支持账号登录和 GET/PUT `/v1/account/config`，请求使用可撤销的短期登录凭据。不含矿池、Pro 或提醒模块。隐私说明见 `public/privacy.html`。
 
 已验证的账户派生路径可用于任意非硬化子索引，默认预计算每个分支的前 200 个地址。恢复旧钱包后使用「检查历史找零」，完整读取分页转出记录；常规刷新从已确认高度回退 12 个区块增量扫描。没有派生路径的旧响应，手动恢复会检索找零分支前 10,000 个地址，不保证任意未知路径都能恢复。查询失败不推进扫描高度，保留旧快照并显示错误。「找零归集」只使用已确认找零，预览转回自己的主地址，仍须密码确认。
 
@@ -233,6 +233,20 @@ SF Symbols 的授权只允许用于 Apple 平台的软件，不能随跨平台�
 插件源码公开在 https://github.com/terryops/prl-hub-wallet ，由 `scripts/export-public.mjs` 导出，做法见 `PUBLIC-SOURCE.md`。插件引用的 18 个网页文件放在公开仓库的 `shared/`。为了让公开仓库编译出相同的文件，`vite.config.ts` 加了 `resolve.dedupe`：以前 `web/src` 下的 `.tsx` 会从 `web/node_modules` 再打包一份 React JSX 运行时，现在只有一份。
 
 验证：插件单元测试 113/113、网页 85/85，类型检查通过；公开仓库全新安装依赖后 113/113，`npm run package` 产生的两个 ZIP 与这里的 0.1.2 包逐个文件一致（各 25 个文件）。浏览器检查：16 种语言 × 360/900 px × 深浅色的安全性说明（12 行、4 个仓库链接、无横向溢出、可返回设置），以及原有的功能 QA、16 语言 QA、核心浏览器 QA 都通过。
+
+### 2026-10-21：确认转账改成回执；Android 版也先查自建索引（0.1.6）
+
+对应原生 App `prl-hub` f06a1cf（「Wallet: the send confirmation is a receipt, not an alert」，2.1.3 build 194/195）。界面在 `src/SendReceipt.tsx`，计算在 `src/receipt.ts`，Chrome 插件和 Android 版共用：
+
+- **布局**同原生 `SendConfirmSheet.swift`：纸飞机徽标、大号金额（按语言分组，最多 8 位小数、不补零）、地址在地址簿里时显示「发送至 名称」；手续费偏高时一条黄色警告；「收款信息」组是完整收款地址（捐赠为「开发者」），测试网多一行「网络」；「金额」组是发送、网络手续费、加粗的合计。原生没有的找零单独一行写在合计下方（0 时不显示），3 分钟失效的提示和密码框保留。
+- **手续费偏高**：手续费超过 500,000 原子单位（0.005 PRL）时警告，网络手续费一行变色，与原生 `feeIsHigh` 相同（`sendFeeReserve` 0.001 × `highFeeReserveMultiple` 5）。
+- **地址按 4 位一组**，首尾两组加粗，中间灰色，只在组与组之间换行。组距是 CSS 间距、不是空格，所以选中复制得到的仍是地址本身；另有复制按钮（原生用长按菜单）。原来的「对半两行」地址只留在捐赠首页。
+- **确认按钮**写明金额「确认发送 1,234.5 PRL」并带纸飞机图标，滚动时固定在弹窗底部；捐赠仍是「确认捐赠」。原生同时修了确认按钮重复触发：插件的密码确认本来就有命令队列挡住第二次，Android 版的指纹／锁屏确认在系统弹窗出现前连点会再请求一次，现在同一时间只请求一次。
+- 9 条新文案（收款信息、金额、发送、合计、网络、发送至 {name}、在本机签名，上链后不可撤销、确认发送 {amount} PRL、本笔手续费明显高于平常，请确认。）直接取原生 App 16 种语言的 `Localizable.strings`；不再使用的「合计支出」「PRL 主网」删除。
+
+**Android 版接入自建索引**：0.1.5 以为 Android 的请求都得由 App 外壳代发、而外壳只代理官方索引，所以 Android 版只用官方的。实际上 Android 里的钱包页面就在 `https://pearlhub.net/wallet/`（外壳从 APK 里应答），`pearlhub.net/node` 与它同源：外壳对不在 APK 里的路径直接放行到网络（`LocalContent.intercept` → `WebRoutes.assetPath` 找不到文件返回 null），同源请求不需要 CORS，App 的 CSP `connect-src 'self'` 也已允许，网关只看 `X-Pearl-Hub-Key` 不看 Origin。所以 `indexers()` 不再区分 Android；广播时自建索引用普通 `fetch`，官方索引仍走外壳的 `net.post`（外壳只允许 Blockbook 主机）。不需要改 prl-hub-android，也不需要新 APK 权限。小组件的后台刷新（`WidgetRefresh.kt`）仍直接读官方索引，没有动。
+
+验证：插件单元测试 152/152，新增 `test/receipt.test.ts`（高手续费阈值、地址分组、多语言金额格式、回执组件的各行内容、复制、测试网与捐赠）、`test/android-indexers.test.ts`（以 Android 构建运行后台：刷新只读自建索引并带键，转账时自建索引收到 fetch、官方索引经外壳 `net.post`，两边是同一笔已签名交易；这个测试在 0.1.5 的代码上失败）和 `ui-features.test.ts` 的转账回执及 Android 连点确认（两次点击只请求一次指纹、只发送一次，去掉防护后失败）；类型检查、`npm run build`、`npm run build:android` 通过，Android 包里有自建索引地址与公开键，Chrome 包里没有 `net.post`。`npm run qa` 全部通过，`features.mjs` 新增回执检查（手续费率 10,000,000 时出现警告、地址 16 组、点选地址得到的选区和复制按钮都等于地址本身、三行金额、320／360／390／1280 px 深浅色不溢出）；`npm run qa:languages` 16 种语言通过。线上只读核对：带公开键和 `Origin: https://pearlhub.net` 请求 `https://pearlhub.net/node/api/v2/` 返回 200 JSON（131294 块，已同步）。没有在真机或模拟器上跑 Android App，也没有真实广播。
 
 ### 2026-10-20：接入自建区块索引（0.1.5）
 

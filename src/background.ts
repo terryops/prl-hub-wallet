@@ -1,6 +1,6 @@
 import { createVault, keyFromPassword, open, seal, bytes64, type Envelope } from "./vault.ts";
 import { checkedMnemonic, newMnemonic, xpub, derived, addressMap, parseAmount, planTransaction, signTransaction, maxAmount, outpoint, type Network, type VaultData, type Pending, type Wallet } from "./wallet.ts";
-import { loadAccount, estimateFee, indexers, indexerHeaders, pinned, txCopies, alreadyKnown, type Snapshot } from "./chain.ts";
+import { loadAccount, estimateFee, indexers, indexerHeaders, pinned, txCopies, alreadyKnown, OWN_MAINNET, type Snapshot } from "./chain.ts";
 import { txDetail, rawTxid, type TxDetail } from "./transactions.ts";
 import { CONTACTS, saveContact, removeContact } from "./contacts.ts";
 import { DONATION_ADDRESS, canDonate, donationAmount } from "./donation.ts";
@@ -126,7 +126,9 @@ type Push = { kind: "ok" | "known" | "notDelivered" | "transport" } | { kind: "e
 async function pushOnce(base: string, hex: string, txid: string): Promise<Push> {
   let response: { ok: boolean; status: number; json: () => Promise<unknown> };
   try {
-    response = ANDROID ? await nativePost(base + "/api/v2/sendtx/", hex, "text/plain")
+    // In the Android app the shell posts to the official indexer for us (no CORS there, and the shell can't
+    // see POST bodies it intercepts); our own index is same-origin in the app, so that one is a plain fetch.
+    response = ANDROID && base !== OWN_MAINNET ? await nativePost(base + "/api/v2/sendtx/", hex, "text/plain")
       : await fetch(base + "/api/v2/sendtx/", { method: "POST", body: hex, headers: indexerHeaders(base, { "Content-Type": "text/plain" }), credentials: "omit", redirect: "error", signal: AbortSignal.timeout(30000) });
   } catch { return { kind: "transport" }; }
   if ([401, 403, 404, 413, 429].includes(response.status)) return { kind: "notDelivered" };

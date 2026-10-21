@@ -106,10 +106,8 @@
   "预览转账": "Xem trước giao dịch",
   "已广播，等待链上确认。": "Đã phát giao dịch. Đang chờ xác nhận trên chuỗi.",
   "广播结果待核对，请查看待确认转账。不要重复创建付款。": "Chưa rõ trạng thái phát giao dịch. Hãy kiểm tra giao dịch đang chờ. Không tạo khoản thanh toán khác.",
-  "PRL 主网": "Mạng chính PRL",
   "PRL 测试网": "Mạng thử nghiệm PRL",
   "手续费": "Phí",
-  "合计支出": "Tổng chi",
   "返回自己的找零": "Tiền thừa trả về ví bạn",
   "预览在 3 分钟后失效。确认时在本机签名，再发送已签名交易。": "Bản xem trước hết hạn sau 3 phút. Khi xác nhận, giao dịch được ký trên thiết bị rồi gửi đi.",
   "再次输入密码确认": "Nhập lại mật khẩu để xác nhận",
@@ -259,5 +257,14 @@
   "网络中已有这笔交易。": "Mạng đã có giao dịch này.",
   "网络拒绝了这笔交易：": "Mạng đã từ chối giao dịch này:",
   "网络没有回应，无法确定交易是否已发出。可以先查询，或再广播一次：同一笔交易重复广播是安全的。": "Mạng không phản hồi nên chưa rõ giao dịch đã được gửi hay chưa. Hãy tra cứu, hoặc phát lại: phát lại cùng một giao dịch là an toàn.",
-  "正在广播…": "Đang phát…"
+  "正在广播…": "Đang phát…",
+  "收款信息": "Nơi nhận",
+  "金额": "Số tiền",
+  "发送": "Gửi",
+  "合计": "Tổng cộng",
+  "网络": "Mạng",
+  "发送至 {name}": "Gửi đến {name}",
+  "在本机签名，上链后不可撤销": "Ký trên thiết bị này · không thể hoàn tác khi đã lên chuỗi",
+  "确认发送 {amount} PRL": "Xác nhận gửi {amount} PRL",
+  "本笔手续费明显高于平常，请确认。": "Phí lần này cao hơn nhiều so với bình thường — hãy kiểm tra lại."
 }

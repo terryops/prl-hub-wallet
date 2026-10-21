@@ -13,11 +13,12 @@ import * as securityOverview from "../shared/security-overview.ts";
 import * as accountCopy from "../shared/account-copy.ts";
 import * as i18n from "../src/i18n/index.ts";
 import * as transactions from "../src/transactions.ts";
+import * as receipt from "../src/receipt.ts";
 const vectors = JSON.parse(readFileSync(new URL("./native-vectors.json", import.meta.url), "utf8"));
 const compiled = ts.transpileModule(readFileSync(new URL("../src/main.tsx", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
 const base = { exists: true, locked: false, selected: "one", network: "mainnet", wallets: [{ id: "one", name: "A", address: vectors.addresses[0], primaryAddress: vectors.addresses[0], index: 0 }], pending: [] };
 type Element = { type: any; props: any };
-function mount(view: any = base, raw: any[] = []) {
+function mount(view: any = base, raw: any[] = [], android?: { deviceSecret: (title: string) => Promise<string> }) {
   const hooks: any[] = []; let cursor = 0, root: Element;
   const calls: any[] = [];
   const React = {
@@ -27,10 +28,12 @@ function mount(view: any = base, raw: any[] = []) {
   };
   vm.runInNewContext(compiled, {
     exports: {}, URLSearchParams, FormData: class { get() { return null; } }, document: { getElementById: () => ({}) }, navigator: { languages: ["zh-CN"] },
+    // The Android build: main.tsx reads __PEARL_ANDROID__, and the vault password comes from the shell's fingerprint prompt.
+    __PEARL_ANDROID__: !!android,
     chrome: { i18n: { getUILanguage: () => "zh-CN" }, runtime: { getManifest: () => ({ version: "0.2.0" }), async sendMessage(message: any) {
-      calls.push(message); return { ok: true, data: message.command === "fee" ? { fee: 50000, estimated: true } : { id: "review", to: donation.DONATION_ADDRESS, donation: true, network: "mainnet", amount: "500000000", fee: "12300", change: "1000" } };
+      calls.push(message); return { ok: true, data: message.command === "fee" ? { fee: 50000, estimated: true } : message.donation ? { id: "review", to: donation.DONATION_ADDRESS, donation: true, network: "mainnet", amount: "500000000", fee: "12300", change: "1000" } : { id: "send", to: vectors.cases[0].to, network: "mainnet", amount: "123456789000", fee: "600000", change: "0" } };
     } } },
-    require: (name: string) => name === "react" ? React : name === "react-dom/client" ? { createRoot: () => ({ render: (element: Element) => { root = element; } }) } : name.includes("wallet.ts") ? wallet : name.includes("chain.ts") ? { origin: () => "https://unused.invalid" } : name.includes("i18n/") ? i18n : name.includes("market.ts") ? market : name.includes("feature-copy.ts") ? featureCopy : name.includes("contacts.ts") ? contacts : name.includes("donation.ts") ? donation : name.includes("web-links.ts") ? webLinks : name.includes("security-overview.ts") ? securityOverview : name.includes("account-copy.ts") ? accountCopy : name.includes("transactions.ts") ? transactions : {},
+    require: (name: string) => name === "react" ? React : name === "react-dom/client" ? { createRoot: () => ({ render: (element: Element) => { root = element; } }) } : android && name.includes("android/native.ts") ? { ...android, walletCopy: () => ({ confirmNote: "Fingerprint" }), secureScreen() {}, forgetDeviceSecret: async () => {}, openSecuritySettings() {}, publishWalletWidget() {}, BridgeError: class extends Error {} } : android && name.includes("android-host.ts") ? { pearlHost: () => undefined } : name.includes("SendReceipt.tsx") ? { SendReceipt: "SendReceipt" } : name.includes("receipt.ts") ? receipt : name.includes("wallet.ts") ? wallet : name.includes("chain.ts") ? { origin: () => "https://unused.invalid" } : name.includes("i18n/") ? i18n : name.includes("market.ts") ? market : name.includes("feature-copy.ts") ? featureCopy : name.includes("contacts.ts") ? contacts : name.includes("donation.ts") ? donation : name.includes("web-links.ts") ? webLinks : name.includes("security-overview.ts") ? securityOverview : name.includes("account-copy.ts") ? accountCopy : name.includes("transactions.ts") ? transactions : {},
   });
   return { render: () => { cursor = 0; return root.type(); }, calls };
 }
@@ -41,17 +44,40 @@ function all(tree: Element, predicate: (e: Element) => boolean): Element[] {
 const content = (tree: Element): string => [tree?.props?.children].flat(Infinity).map((child) => typeof child === "object" ? content(child) : child ?? "").join("");
 const button = (tree: Element, text: string) => all(tree, (e) => e.type === "button" && content(e) === text)[0];
 const tick = () => new Promise((resolve) => setImmediate(resolve));
-test("donation UI stays closed until clicked; receipt has exact two-line address, fee/total and no fiat", async () => {
+test("donation UI stays closed until clicked; its receipt is the fixed developer address with fee/total and no fiat", async () => {
   const app = mount(); assert.equal(app.calls.length, 0);
   button(app.render(), "支持开发者").props.onClick(); await tick();
   assert.deepEqual(app.calls.map((m) => m.command), ["fee"]);
   button(app.render(), "5 PRL").props.onClick(); await tick();
   assert.equal(app.calls[1].command, "prepare"); assert.equal(app.calls[1].donation, true); assert.equal(app.calls[1].amount, "5");
-  const receipt = all(app.render(), (e) => e.props?.className === "donation-address")[0];
-  assert.equal(all(receipt, (e) => e.type === "span").length, 2); assert.equal(content(receipt), donation.DONATION_ADDRESS);
-  assert.ok(button(app.render(), "确认捐赠")); assert.equal(content(app.render()).includes("合计支出"), true);
+  const receipts = all(app.render(), (e) => e.type === "SendReceipt");
+  assert.equal(receipts.length, 1); assert.equal(receipts[0].props.review.to, donation.DONATION_ADDRESS); assert.equal(receipts[0].props.review.donation, true);
+  assert.equal(receipts[0].props.payee, undefined); assert.equal(receipts[0].props.lang, "zh-Hans");
+  assert.ok(button(app.render(), "确认捐赠"));
   assert.equal(all(app.render(), (e) => e.type === "dialog").some((e) => content(e).includes("$")), false);
   assert.equal(app.calls.some((m) => m.command === "send"), false);
+});
+test("a send previews as a receipt: the contact's name, and the amount on the confirm button", async () => {
+  const app = mount(base, [{ id: "contact", name: "Saved name", address: vectors.cases[0].to, note: "" }]);
+  all(app.render(), (e) => e.type === "button" && e.props?.["aria-label"] === "↑ 转账")[0].props.onClick(); await tick();
+  all(all(app.render(), (e) => e.type === "dialog")[0], (e) => e.type === "form")[0].props.onSubmit({ preventDefault() {}, currentTarget: {} }); await tick();
+  assert.equal(app.calls.at(-1).command, "prepare");
+  const tree = app.render(), receipt = all(tree, (e) => e.type === "SendReceipt")[0];
+  assert.equal(receipt.props.review.to, vectors.cases[0].to); assert.equal(receipt.props.payee, "Saved name");
+  assert.ok(button(tree, "确认发送 1,234.56789 PRL")); assert.ok(button(tree, "返回修改"));
+  assert.equal(all(tree, (e) => e.props?.className === "receipt-actions").length, 1);
+});
+test("Android: a second tap on confirm before the fingerprint prompt shows doesn't ask again or send twice", async () => {
+  const asked: string[] = []; let grant!: (secret: string) => void;
+  const app = mount(base, [], { deviceSecret: (title) => { asked.push(title); return new Promise((resolve) => { grant = resolve; }); } });
+  const submit = () => all(all(app.render(), (e) => e.type === "dialog")[0], (e) => e.type === "form")[0].props.onSubmit({ preventDefault() {}, currentTarget: {} });
+  all(app.render(), (e) => e.type === "button" && e.props?.["aria-label"] === "↑ 转账")[0].props.onClick(); await tick();
+  submit(); await tick(); assert.equal(all(app.render(), (e) => e.type === "SendReceipt").length, 1);
+  submit(); submit(); await tick();
+  assert.deepEqual(asked, ["确认并发送"]); assert.equal(app.calls.some((m) => m.command === "send"), false);
+  grant("s".repeat(43)); await tick(); await tick();
+  const sends = app.calls.filter((m) => m.command === "send");
+  assert.equal(sends.length, 1); assert.equal(sends[0].password, "s".repeat(43)); assert.equal(sends[0].id, "send");
 });
 test("testnet/developer wallets hide donation; testnet hides invalid web deep links", () => {
   assert.equal(button(mount({ ...base, network: "testnet" }).render(), "支持开发者"), undefined);

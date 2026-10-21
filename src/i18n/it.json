@@ -106,10 +106,8 @@
   "预览转账": "Anteprima trasferimento",
   "已广播，等待链上确认。": "Trasmessa. In attesa di conferma on-chain.",
   "广播结果待核对，请查看待确认转账。不要重复创建付款。": "Lo stato della trasmissione è sconosciuto. Controlla i trasferimenti in sospeso. Non creare un altro pagamento.",
-  "PRL 主网": "PRL Mainnet",
   "PRL 测试网": "PRL Testnet",
   "手续费": "Comm.",
-  "合计支出": "Totale speso",
   "返回自己的找零": "Resto restituito a te",
   "预览在 3 分钟后失效。确认时在本机签名，再发送已签名交易。": "L'anteprima scade tra 3 minuti. Alla conferma la transazione viene firmata su questo dispositivo e poi inviata.",
   "再次输入密码确认": "Reinserisci la password per confermare",
@@ -259,5 +257,14 @@
   "网络中已有这笔交易。": "La rete ha già questa transazione.",
   "网络拒绝了这笔交易：": "La rete ha rifiutato questa transazione:",
   "网络没有回应，无法确定交易是否已发出。可以先查询，或再广播一次：同一笔交易重复广播是安全的。": "Nessuna risposta dalla rete, quindi non si sa se la transazione è partita. Cercala o trasmettila di nuovo: trasmettere due volte la stessa transazione è sicuro.",
-  "正在广播…": "Trasmissione…"
+  "正在广播…": "Trasmissione…",
+  "收款信息": "Destinazione",
+  "金额": "Importo",
+  "发送": "Invia",
+  "合计": "Totale",
+  "网络": "Rete",
+  "发送至 {name}": "Invio a {name}",
+  "在本机签名，上链后不可撤销": "Firmata su questo dispositivo · definitiva una volta on-chain",
+  "确认发送 {amount} PRL": "Conferma invio di {amount} PRL",
+  "本笔手续费明显高于平常，请确认。": "Questa commissione è molto più alta del solito: ricontrolla."
 }

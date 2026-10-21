@@ -106,10 +106,8 @@
   "预览转账": "Pré-visualizar transferência",
   "已广播，等待链上确认。": "Transmitida. Aguardando confirmação na rede.",
   "广播结果待核对，请查看待确认转账。不要重复创建付款。": "O status da transmissão é desconhecido. Verifique as transferências pendentes. Não crie outro pagamento.",
-  "PRL 主网": "Rede principal PRL",
   "PRL 测试网": "Rede de teste PRL",
   "手续费": "Taxa",
-  "合计支出": "Total gasto",
   "返回自己的找零": "Troco devolvido para você",
   "预览在 3 分钟后失效。确认时在本机签名，再发送已签名交易。": "A visualização expira em 3 minutos. Ao confirmar, a transação é assinada neste dispositivo e depois enviada.",
   "再次输入密码确认": "Digite novamente a senha para confirmar",
@@ -259,5 +257,14 @@
   "网络中已有这笔交易。": "A rede já tem esta transação.",
   "网络拒绝了这笔交易：": "A rede recusou esta transação:",
   "网络没有回应，无法确定交易是否已发出。可以先查询，或再广播一次：同一笔交易重复广播是安全的。": "A rede não respondeu, então não se sabe se a transação saiu. Consulte-a ou transmita de novo: transmitir a mesma transação duas vezes é seguro.",
-  "正在广播…": "Transmitindo…"
+  "正在广播…": "Transmitindo…",
+  "收款信息": "Destino",
+  "金额": "Valor",
+  "发送": "Enviar",
+  "合计": "Total",
+  "网络": "Rede",
+  "发送至 {name}": "Enviar para {name}",
+  "在本机签名，上链后不可撤销": "Assinada neste dispositivo · irreversível na blockchain",
+  "确认发送 {amount} PRL": "Confirmar envio de {amount} PRL",
+  "本笔手续费明显高于平常，请确认。": "Esta taxa está muito acima do normal — confira antes de continuar."
 }

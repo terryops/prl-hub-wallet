@@ -37,12 +37,30 @@ try {
   await page.locator(".contact strong").filter({ hasText: "QA Exchange" }).waitFor();
   await button("↑ 转账").click(); await page.getByLabel("地址簿", { exact: true }).selectOption(vectors.cases[0].to);
   assert.equal(await page.getByLabel("收款地址", { exact: true }).inputValue(), vectors.cases[0].to);
-  await page.getByLabel("转账金额", { exact: true }).fill("1"); await button("预览转账").click(); await button("确认并发送").waitFor();
-  await page.locator("dialog .payee").filter({ hasText: "QA Exchange" }).waitFor(); await closeDialog();
+  await page.getByLabel("转账金额", { exact: true }).fill("1"); await button("预览转账").click(); await button("确认发送 1 PRL").waitFor();
+  await page.locator("dialog .receipt-payee").filter({ hasText: "发送至 QA Exchange" }).waitFor(); await closeDialog();
   await button("↑ 转账").click(); await page.getByLabel("收款地址", { exact: true }).fill(vectors.addresses[1]); await page.getByLabel("转账金额", { exact: true }).fill("2");
   await button("保存到地址簿").click(); await page.getByLabel("名称", { exact: true }).fill("Second contact"); await button("保存").click();
   await button("预览转账").waitFor(); assert.equal(await page.getByLabel("收款地址", { exact: true }).inputValue(), vectors.addresses[1]); assert.equal(await page.getByLabel("转账金额", { exact: true }).inputValue(), "2"); await closeDialog();
   console.log("PASS B2 contact add/edit/copy, send picker, preview name, save recipient without losing draft");
+
+  // 确认转账 as a receipt (native SendConfirmSheet.swift): high-fee warning, the address in 4-character groups that
+  // still selects and copies as the address, amount + network fee = total, confirm button with the amount.
+  await button("↑ 转账").click(); await page.getByLabel("收款地址", { exact: true }).fill(vectors.cases[0].to); await page.getByLabel("转账金额", { exact: true }).fill("1");
+  await page.getByLabel("手续费率", { exact: true }).fill("10000000"); await button("预览转账").click(); await button("确认发送 1 PRL").waitFor();
+  await page.locator("dialog .fee-warning").filter({ hasText: "本笔手续费明显高于平常，请确认。" }).waitFor();
+  assert.equal(await page.locator("dialog .receipt-row.high").count(), 1);
+  const grouped = page.locator("dialog .grouped-address");
+  assert.equal(await grouped.locator("span").count(), Math.ceil(vectors.cases[0].to.length / 4));
+  assert.equal((await grouped.locator("span.edge").allTextContents()).join(""), vectors.cases[0].to.slice(0, 4) + vectors.cases[0].to.slice(-(vectors.cases[0].to.length % 4 || 4)));
+  await grouped.click(); assert.equal(await page.evaluate(() => getSelection().toString()), vectors.cases[0].to);
+  await page.locator("dialog").getByRole("button", { name: "复制地址", exact: true }).click(); assert.equal(await page.evaluate(() => navigator.clipboard.readText()), vectors.cases[0].to);
+  const amounts = await page.locator("dialog .receipt-section").last().locator(".receipt-row").allInnerTexts();
+  assert.equal(amounts.length, 3); assert.match(amounts[0], /^发送\s+1 PRL$/); assert.match(amounts[1], /^网络手续费\s+0\.0\d+ PRL$/); assert.match(amounts[2], /^合计\s+1\.0\d+ PRL$/);
+  for (const theme of ["light", "dark"]) for (const width of [320, 360, 390, 1280]) { await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" }); await page.setViewportSize({ width, height: 700 }); await fits(page, `receipt ${theme} ${width}`); await page.screenshot({ path: `out/features/receipt-${theme}-${width}.png` }); }
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" }); await page.setViewportSize({ width: 390, height: 900 });
+  await closeDialog();
+  console.log("PASS receipt: high-fee warning, grouped address copies as the address, amount + fee = total, fits 320–1280 px light/dark");
 
   await button("交易记录").click(); assert.equal(await page.locator(".transaction").count(), 3); assert.equal(await page.locator(".peer").count(), 2);
   for (const peer of await page.locator(".peer code").evaluateAll((codes) => codes.map((c) => c.title))) assert.equal(peer, vectors.cases[0].to);
@@ -51,10 +69,11 @@ try {
   console.log("PASS B3 receipt source, largest outgoing external address, hidden self-send, copy and contact names");
 
   await button("支持开发者").click(); await button("5 PRL").click(); await button("确认捐赠").waitFor();
-  const receipt = page.locator("dialog .donation-address"); assert.equal(await receipt.locator("span").count(), 2);
+  const receipt = page.locator("dialog .grouped-address"); assert.equal(await receipt.locator("span").count(), 16);
   assert.equal((await receipt.locator("span").allTextContents()).join(""), "prl1pmkyxyht58rzhe7cj9ha7ncpm6r28x6g0htq93ffs5hsh7lqsxj7qw9pyjv");
+  assert.match(await page.locator("dialog .receipt-address-label").innerText(), /开发者/);
   assert.equal(await page.locator("dialog .fiat,dialog .market-line").count(), 0);
-  assert.match(await page.locator("dialog dl").innerText(), /手续费/); assert.match(await page.locator("dialog dl").innerText(), /合计支出/);
+  assert.match(await page.locator("dialog .receipt-section").last().innerText(), /网络手续费[\s\S]*合计/);
   await page.getByLabel("再次输入密码确认", { exact: true }).fill("wrong-password"); await button("确认捐赠").click(); await page.getByRole("status").filter({ hasText: "密码错误" }).waitFor(); assert.equal(await worker.evaluate(() => fixture.broadcasts.length), 0);
   for (const theme of ["light", "dark"]) for (const width of [320, 360, 390, 1280]) { await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" }); await page.setViewportSize({ width, height: 900 }); await fits(page, `donation ${theme} ${width}`); }
   await closeDialog(); await button("支持开发者").click(); await page.getByLabel("自定义金额").fill("0.9"); await button("捐赠").click(); await page.getByRole("status").filter({ hasText: "最少 1 PRL" }).waitFor(); await closeDialog();

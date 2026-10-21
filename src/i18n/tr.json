@@ -106,10 +106,8 @@
   "预览转账": "Transferi önizle",
   "已广播，等待链上确认。": "Yayınlandı. Zincir üzerinde onay bekleniyor.",
   "广播结果待核对，请查看待确认转账。不要重复创建付款。": "Yayın durumu bilinmiyor. Bekleyen transferleri kontrol edin. Başka bir ödeme oluşturmayın.",
-  "PRL 主网": "PRL Ana Ağı",
   "PRL 测试网": "PRL Test Ağı",
   "手续费": "Ücret",
-  "合计支出": "Toplam harcanan",
   "返回自己的找零": "Size dönen para üstü",
   "预览在 3 分钟后失效。确认时在本机签名，再发送已签名交易。": "Önizleme 3 dakika sonra geçersiz olur. Onayladığınızda işlem bu cihazda imzalanır, ardından imzalı işlem gönderilir.",
   "再次输入密码确认": "Onaylamak için şifreyi tekrar girin",
@@ -259,5 +257,14 @@
   "网络中已有这笔交易。": "Ağda bu işlem zaten var.",
   "网络拒绝了这笔交易：": "Ağ bu işlemi reddetti:",
   "网络没有回应，无法确定交易是否已发出。可以先查询，或再广播一次：同一笔交易重复广播是安全的。": "Ağdan yanıt gelmedi, bu yüzden işlemin gönderilip gönderilmediği bilinmiyor. İşlemi sorgulayın ya da yeniden yayınlayın: aynı işlemi iki kez yayınlamak güvenlidir.",
-  "正在广播…": "Yayınlanıyor…"
+  "正在广播…": "Yayınlanıyor…",
+  "收款信息": "Alıcı bilgileri",
+  "金额": "Miktar",
+  "发送": "Gönder",
+  "合计": "Toplam",
+  "网络": "Ağ",
+  "发送至 {name}": "Alıcı: {name}",
+  "在本机签名，上链后不可撤销": "Bu cihazda imzalanır · zincire yazıldıktan sonra geri alınamaz",
+  "确认发送 {amount} PRL": "{amount} PRL Gönderimini Onayla",
+  "本笔手续费明显高于平常，请确认。": "Bu işlem ücreti normalden çok daha yüksek; lütfen kontrol edin."
 }

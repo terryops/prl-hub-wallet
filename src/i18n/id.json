@@ -106,10 +106,8 @@
   "预览转账": "Pratinjau transfer",
   "已广播，等待链上确认。": "Terkirim. Menunggu konfirmasi on-chain.",
   "广播结果待核对，请查看待确认转账。不要重复创建付款。": "Status pengiriman belum diketahui. Periksa transfer tertunda. Jangan membuat pembayaran lain.",
-  "PRL 主网": "Jaringan utama PRL",
   "PRL 测试网": "Jaringan uji PRL",
   "手续费": "Biaya",
-  "合计支出": "Total pengeluaran",
   "返回自己的找零": "Kembalian ke dompet Anda",
   "预览在 3 分钟后失效。确认时在本机签名，再发送已签名交易。": "Pratinjau kedaluwarsa dalam 3 menit. Konfirmasi menandatangani transaksi di perangkat ini, lalu mengirim transaksi yang ditandatangani.",
   "再次输入密码确认": "Masukkan ulang kata sandi untuk konfirmasi",
@@ -259,5 +257,14 @@
   "网络中已有这笔交易。": "Jaringan sudah memiliki transaksi ini.",
   "网络拒绝了这笔交易：": "Jaringan menolak transaksi ini:",
   "网络没有回应，无法确定交易是否已发出。可以先查询，或再广播一次：同一笔交易重复广播是安全的。": "Jaringan tidak menjawab, jadi belum diketahui apakah transaksi sudah terkirim. Cek transaksinya, atau siarkan lagi: menyiarkan transaksi yang sama dua kali itu aman.",
-  "正在广播…": "Menyiarkan…"
+  "正在广播…": "Menyiarkan…",
+  "收款信息": "Tujuan",
+  "金额": "Jumlah",
+  "发送": "Kirim",
+  "合计": "Total",
+  "网络": "Jaringan",
+  "发送至 {name}": "Kirim ke {name}",
+  "在本机签名，上链后不可撤销": "Ditandatangani di perangkat ini · final setelah masuk blockchain",
+  "确认发送 {amount} PRL": "Konfirmasi Kirim {amount} PRL",
+  "本笔手续费明显高于平常，请确认。": "Biaya ini jauh lebih tinggi dari biasanya — periksa lagi."
 }
