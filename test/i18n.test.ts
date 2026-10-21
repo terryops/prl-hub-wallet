@@ -33,7 +33,7 @@ test('language detection handles regions, scripts, unsupported preferences and f
 });
 
 test('wallet service errors and UI source strings all have translations', () => {
-  for (const file of ['main.tsx','TxDetail.tsx','SendReceipt.tsx','receipt.ts','transactions.ts','background.ts','chain.ts','wallet.ts','vault.ts','contacts.ts','donation.ts','contact-sync.ts']) {
+  for (const file of ['main.tsx','TxDetail.tsx','SendReceipt.tsx','receipt.ts','transactions.ts','background.ts','chain.ts','wallet.ts','vault.ts','contacts.ts','donation.ts','contact-sync.ts','nock/NockView.tsx','nock/service.ts','nock/errors.ts','nock/client.ts']) {
     const source = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8');
     const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
     function visit(node: ts.Node) {

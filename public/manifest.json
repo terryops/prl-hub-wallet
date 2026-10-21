@@ -2,13 +2,16 @@
   "manifest_version": 3,
   "name": "__MSG_name__",
   "description": "__MSG_description__",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "minimum_chrome_version": "120",
   "permissions": [
     "storage",
     "alarms",
     "sidePanel",
     "identity"
+  ],
+  "optional_host_permissions": [
+    "http://216.158.95.10/*"
   ],
   "host_permissions": [
     "https://blockbook.pearlresearch.ai/*",
@@ -31,7 +34,7 @@
   },
   "options_page": "index.html",
   "content_security_policy": {
-    "extension_pages": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src https://blockbook.pearlresearch.ai https://blockbook.testnet.pearlresearch.ai https://pearlhub.net; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+    "extension_pages": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://blockbook.pearlresearch.ai https://blockbook.testnet.pearlresearch.ai https://pearlhub.net https://rpc.nockbox.org http://216.158.95.10:5556 https://api.coingecko.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
   },
   "default_locale": "en",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsS3OFNslfQlekXLn4qsoi3wlulZctKJfw5XENbI/GOH2uXaSVU0/pLK8ApRGKe0qxhSSQfJNX2WMaybQDjzIVyKDku5XQ+ddHDDQ2m4jNAw1vMorRa5SEDfdTA+pDeI7ymhS58IVbXSt/QR8NHSmpG8s09aLZnqWMDM0pfgdLNGHIN2FBglz/Xbfja22YpH80AadnDFQQ8pU1MHaKPHAdbrCI6TObfKAeHadDQiJGJHubJ3yBhenuBsBDSj9VkbGLk8yd7yJOsspeMGWyDJ/gijxcqOIbk3/bnoze4uxyEEWUUDiZblrnDTnNgINikbsi+YeMjHqrtBNjbpeB9DfDQIDAQAB"

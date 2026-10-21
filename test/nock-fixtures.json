@@ -1,0 +1,16 @@
+{
+  "accepted": "CAE=",
+  "address": "3zxKWhhd8HY9pT2ZCZNUSEz2XWwSk15P2sD3atnnnxRtHa2Ta1H4jRy",
+  "balanceCoinbase": "CssCCp4BEpsBEpgBCgIIARIECMCgChqCAQo/CgoI7ZD67bur1PVMEgsIo/KigeSPtNuwARoLCM2l7r/y9+Oa+gEiCgjH7OPI1Nr9qTAqCwid1b7+mb6novIBEj8KCwio2PLd3eXM2cABEgoIw7PahLWxjLgfGgoIt4LgrKjT4OspIgsI5YbQ7fnsxM+LASoLCMCbpqawwej29wEiACoFCICAyAEKnwESnAESmQEKAggBEgQI9qcKGoMBCj8KCgjtkPrtu6vU9UwSCwij8qKB5I+027ABGgsIzaXuv/L345r6ASIKCMfs48jU2v2pMCoLCJ3Vvv6Zvqei8gESQAoLCPfZkKCZy9mSrQESCgi1nJrS4K7Nmw4aCwiDm6nn1Ibb9JsBIgsIn9bip82DtbqfASoLCK+igYDZrr6j/QEiACoFCICAmAISBAioqAoiAA==",
+  "balanceSimple": "CsYCCp0BEpoBEpcBCgIIARIECMCgChqCAQo/CgoI7LuX6um4zsZyEgoIya72gNLLqf5TGgsI96ueraKfz+X+ASILCN3Lxp2A65Cp0QEqCwj9io3e44LamfABEj8KCwiisNuk8rmUhoABEgoImbfbtozN1+QLGgsIoMvco97+raaGASIKCNapo8ruh/XbWCoLCJ3J44b94prwpgEiACoECICAeAqbARKYARKVAQoCCAESBAikoQoagAEKPwoKCOy7l+rpuM7GchIKCMmu9oDSy6n+UxoLCPernq2in8/l/gEiCwjdy8adgOuQqdEBKgsI/YqN3uOC2pnwARI9CgoIzuDDjs6VnrUyEgoIr9bBw5iQm7coGgoIhraS0sDTlrkcIgoImp3VhfP+lrQhKgsIvIe4u/XZgZPMASIAKgQIgIAUEgQIqKgKIgA=",
+  "blocks": "CkgKDxCoqAog8OPYy9OBgICAAQoPEPanCiCkqdjL04GAgIABCg8QpKEKIJjF0MvTgYCAgAEKDxDAoAoggNDPy9OBgICAARCoqAo=",
+  "firstNames": {
+    "coinbase": "D3BnY1jgQj6vp94hoGhmftQVgmw3toaTeaKbSfkX6GuGjyUmonxS9mr",
+    "simple": "CwEFY5fXRDz4vwLukjDv67RaMimaGQuwoBijXa5DzJvgRpWm1Ub5cNy"
+  },
+  "generator": "nock-core tests/vectors.rs write_wallet_qa_fixtures",
+  "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+  "notAccepted": "CAA=",
+  "recipient": "3b3eG8WgWHfXTeAMJzNDWxM3b6WFadxQiiJRQrY6zPJ4J2F5QtHjZRQ",
+  "sendAck": "CgA="
+}

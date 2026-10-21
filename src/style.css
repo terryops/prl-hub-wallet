@@ -382,3 +382,60 @@ dd { min-width: 0; margin: 0; text-align: right; overflow-wrap: anywhere; font-v
 @media (prefers-reduced-motion: reduce) {
   *, *::before { animation: none !important; transition: none !important; }
 }
+
+/* NOCK (Nockchain), the same seed's second chain (nock/NockView.tsx). Like the native app, it stays out of
+   PRL's way: a muted strip or a one-line link on the wallet page, its own page behind them. */
+.nock-badge { --nock-gradient: linear-gradient(135deg, #ffb35c, #ff7a59 55%, #f2577c); display: inline-grid; place-items: center; flex-shrink: 0; width: 28px; height: 28px; border-radius: 9px; background: var(--nock-gradient); color: #fff; }
+.nock-badge .icon { width: 58%; height: 58%; }
+.nock-badge.small { width: 18px; height: 18px; border-radius: 6px; }
+.nock-badge.large { width: 52px; height: 52px; border-radius: 16px; margin-bottom: 6px; }
+.nock-badge.muted { filter: saturate(.35); opacity: .8; }
+.nock-chevron { width: 14px !important; height: 14px !important; color: var(--muted); transform: rotate(-90deg); }
+.nock-link { display: flex; width: 100%; min-height: 36px; margin: 18px 0 0; padding: 6px 4px; gap: 6px; border: 0; background: transparent; color: var(--muted); font-size: var(--font-12); font-weight: 500; }
+.nock-link:hover { background: transparent; color: var(--blue-text); }
+.nock-link-name { color: var(--blue-text); white-space: nowrap; }
+.nock-link-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nock-strip { display: flex; width: 100%; min-height: 48px; margin: 0 0 12px; padding: 8px 14px; gap: 10px; justify-content: flex-start; border-radius: 14px; background: var(--surface); color: var(--muted); font-weight: 500; }
+.nock-strip:hover { background: var(--hover); }
+.nock-strip-name { font-size: var(--font-14); }
+.nock-strip-value { display: flex; flex: 1; align-items: baseline; justify-content: flex-end; gap: 8px; min-width: 0; font-variant-numeric: tabular-nums; }
+.nock-strip-value b { font-size: var(--font-14); font-weight: 550; white-space: nowrap; }
+.nock-strip-value b[data-cached="true"], .nock-hero .balance[data-cached="true"] { opacity: .65; }
+.nock-strip-value small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nock-strip-value .icon { width: 16px; height: 16px; }
+.nock-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--muted); border-radius: 50%; animation: nock-spin .8s linear infinite; }
+@keyframes nock-spin { to { transform: rotate(360deg); } }
+.nock-nav { margin: -6px 0 12px; }
+.nock-back { min-height: 32px; padding: 4px 8px 4px 2px; gap: 2px; border: 0; background: transparent; color: var(--blue-text); font-size: var(--font-14); }
+.nock-back:hover { background: transparent; text-decoration: underline; }
+.nock-back .icon { width: 16px; height: 16px; transform: rotate(90deg); }
+.nock-hero .balance-heading { gap: 6px; }
+.nock-toast { margin: 0 0 12px; border: 0; border-radius: 12px; color: var(--green); font-weight: 600; }
+.nock-problem { display: flex; align-items: flex-start; gap: 8px; color: var(--warn); }
+.nock-problem .icon { width: 16px; height: 16px; margin-top: 1px; }
+.nock-info { display: flex; align-items: flex-start; gap: 10px; margin: 16px 0; padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); font-size: var(--font-12); }
+.nock-info > .icon { width: 18px; height: 18px; margin-top: 2px; color: var(--blue-text); }
+.nock-info strong { display: block; font-size: var(--font-13); margin-bottom: 4px; }
+.nock-info p { margin: 0; color: var(--muted); }
+.receipt .nock-info { background: var(--soft); }
+.nock-row.failed .tx-amount b { color: var(--muted); text-decoration: line-through; }
+.nock-row .tx-amount b.incoming, .review-amount.incoming { color: var(--green); }
+.nock-row .tx-amount b small { display: inline; font-weight: 500; }
+.nock-row .tx-amount > small { display: block; }
+.nock-pending { color: var(--warn) !important; }
+.nock-row .tx-open { align-self: center; }
+.nock-footnote { display: block; margin-top: 12px; line-height: 1.7; }
+.empty small { display: block; margin-top: 6px; }
+.nock-available { margin: 0 0 4px; padding: 12px 14px; border-radius: 12px; background: var(--soft); color: var(--muted); font-size: var(--font-14); }
+.nock-address-input { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: var(--font-13); }
+.field-note { margin: -10px 0 12px; font-size: var(--font-12); }
+.field-note.error { color: var(--red); }
+.field-note.warn { color: var(--warn); }
+p.field-note[role="alert"] { margin: 12px 0; }
+.nock-receive-label { margin: 0 0 8px !important; font-size: var(--font-13) !important; font-weight: 600; color: var(--text) !important; }
+.nock-detail .receipt-hero p { margin: 6px 0 0; }
+.nock-txid { display: block; padding: 12px 0; font-size: var(--font-12); }
+.nock-tx-actions { margin-top: 10px; }
+.nock-tx-actions button .icon { width: 15px; height: 15px; }
+.nock-offer { align-items: flex-start; }
+.nock-offer button { margin-top: 10px; min-height: 34px; padding: 6px 12px; font-size: var(--font-12); }

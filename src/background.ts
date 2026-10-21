@@ -7,6 +7,7 @@ import { DONATION_ADDRESS, canDonate, donationAmount } from "./donation.ts";
 import { CONTACT_LINK, syncContacts } from "./contact-sync.ts";
 import { accountState, loginAccount, logoutAccount } from "./account.ts";
 import { nativePost } from "./android/native.ts";
+import { nockStatus, nockRefresh, nockShown, nockCheck, nockPrepare, nockMax, nockSend, nockForget, nockForgetAll } from "./nock/service.ts";
 // Defined per module (not imported) so the Chrome build folds it even across shared chunks.
 declare const __PEARL_ANDROID__: boolean | undefined;
 const ANDROID = typeof __PEARL_ANDROID__ !== "undefined" && __PEARL_ANDROID__ === true;
@@ -244,6 +245,7 @@ async function handle(m: Message, epoch: number) {
       (m.expectedNetwork !== undefined && m.expectedNetwork !== data.network))
     throw new Error("钱包或网络已切换，请重新操作。");
   if (m.command === "contact-sync") return syncContacts(stillActive);
+  if (m.command.startsWith("nock-")) return nock(m, w, stillActive);
   // Android home-screen widget: the public key and change addresses it refreshes the balance from.
   if (ANDROID && m.command === "widget-keys") return { xpub: xpub(w.mnemonic, data.network), changeAddresses: w.changeAddresses?.[data.network] || [] };
   if (m.command === "contact-save" || m.command === "contact-remove") {
@@ -279,8 +281,11 @@ async function handle(m: Message, epoch: number) {
     if (text(m.name) !== w.name) throw new Error("请输入准确的钱包名称。");
     if (data.pending.some((p) => p.walletId === w.id)) throw new Error("此钱包仍有待确认交易，请先核对链上状态。");
     data.wallets = data.wallets.filter((x) => x.id !== w.id);
-    if (!data.wallets.length) { await chrome.storage.local.remove(VAULT); return lock(); }
-    data.selected = data.wallets[0].id; await save(data); await chrome.storage.session.remove([SNAPSHOT, REVIEW]); return status();
+    if (!data.wallets.length) { await chrome.storage.local.remove(VAULT); await nockForgetAll(); return lock(); }
+    data.selected = data.wallets[0].id; await save(data); await chrome.storage.session.remove([SNAPSHOT, REVIEW]);
+    // The same seed's NOCK side goes with it: its address, history and sends in flight.
+    await nockForget(w.id);
+    return status();
   }
   if (m.command === "password") {
     await passwordData(text(m.password));
@@ -388,6 +393,21 @@ async function handle(m: Message, epoch: number) {
   }
   throw new Error("操作无效。");
 }
+/// The open wallet's NOCK (Nockchain) side, from the same seed (nock/service.ts). These run outside the PRL
+/// queue: a slow Nockchain node must not hold up PRL, and the NOCK service orders its own changes.
+async function nock(m: Message, w: Wallet, stillActive: () => void) {
+  switch (m.command) {
+    case "nock-status": return nockStatus(w.id);
+    case "nock-refresh": return nockRefresh(w.id, w.mnemonic, typeof m.stale === "number" && Number.isFinite(m.stale) ? m.stale : 0);
+    case "nock-shown": return nockShown(w.id, w.mnemonic);
+    case "nock-check": return nockCheck(w.id, w.mnemonic, text(m.address));
+    case "nock-prepare": return nockPrepare(w.id, w.mnemonic, text(m.to), text(m.amount), m.max === true);
+    case "nock-max": return nockMax(w.id, w.mnemonic, text(m.to));
+    // Signed when prepared; it leaves the device only after the password (Android: the lock screen) again.
+    case "nock-send": return nockSend(w.id, text(m.id), async () => { await passwordData(text(m.password)); stillActive(); await session(); }, stillActive);
+  }
+  throw new Error("操作无效。");
+}
 // Only our packaged wallet page can invoke the signing interface. No web-page
 // provider, content script, externally_connectable route or arbitrary URL relay.
 chrome.runtime.onMessage.addListener((message, sender, reply) => {
@@ -395,7 +415,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
   if (message.command === "lock") { lock().then((data) => reply({ ok: true, data }), () => reply({ ok: false, error: "锁定失败。" })); return true; }
   const epoch = lockEpoch;
   // Transaction lookups only read: they neither wait behind a refresh or send nor hold one up.
-  const independent = ["account-login", "account-state", "contact-link", "tx-detail", "tx-rebroadcast"].includes(message.command);
+  const independent = ["account-login", "account-state", "contact-link", "tx-detail", "tx-rebroadcast"].includes(message.command) || message.command.startsWith("nock-");
   const work = independent ? handle(message, epoch) : enqueue(() => handle(message, epoch));
   work.then((data) => reply({ ok: true, data }), (error) => reply({ ok: false, error: error instanceof Error ? error.message : "操作失败。" }));
   return true;

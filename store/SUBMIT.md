@@ -1,4 +1,4 @@
-# Chrome 商店注册与提交清单（Pearl Hub Wallet 0.1.2）
+# Chrome 商店注册与提交清单（Pearl Hub Wallet 0.1.2 起，0.1.7 的改动见第八节）
 
 按商店后台的顺序逐项填写。英文文案取自 `store/en.json`，其他语言取自对应的 `store/<语言>.json`。
 
@@ -110,3 +110,32 @@ node scripts/store-release.mjs submit --staged   # 审核通过后先暂存，�
 脚本只上传已经打好的包，不会重新打包：商店包要在本仓库提交过的版本上用 `npm run package` 打出（公开仓库即源码，见 README「Verify a package」），再提交。上传前它会检查包里清单的版本等于 `package.json`、没有 `key`、当前没有审核中的提交。
 
 授权（2026-10-16 配置）：Google Cloud 项目 `pearl-hub-store-release`（属于 breathlex@gmail.com）里的服务账号 `cws-publisher@pearl-hub-store-release.iam.gserviceaccount.com`，已在商店后台 Account 页加为发布者的服务账号（每个发布者只能加一个）。没有密钥文件：脚本用 gcloud 以 breathlex@gmail.com 的身份模拟这个服务账号，临时换取令牌（breathlex@gmail.com 在服务账号上有 `roles/iam.serviceAccountTokenCreator`）。换一台电脑时先运行 `gcloud auth login breathlex@gmail.com --no-activate`，不会改变 gcloud 当前的默认账号。
+
+## 八、0.1.7（NOCK）：提交前要在后台改的内容
+
+0.1.7 加了 NOCK（Nockchain），数据流向和功能描述都变了：NOCK 地址推出的标识发给 NockBox 的公共节点 `rpc.nockbox.org`（对任何来源返回 CORS 头，不需要站点权限），NOCK 币价向 CoinGecko 查询（不带地址），新增一项**可选**站点权限 `http://216.158.95.10/*`（备用节点，用户在 NOCK 页点允许才申请）。API 只上传安装包，下面这些要在后台手动改。隐私政策 https://pearlhub.net/privacy 已先加上插件的 NOCK 段落。
+
+顺序：先用 `npm run store:upload` 把 0.1.7 商店包传成草稿（这样后台 Package 和 Privacy 页能看到新权限），在后台改完各页并点 **Save draft**（不要点提交），再运行 `npm run store:publish` 提交审核，通过后自动发布。也可以改完直接在后台点「Submit for review」。
+
+**Store listing**：16 种语言的详细说明全部换成 `store/<语言>.json` 的 `detailedDescription`（0.1.7 重写：英文加了 NOCK 和自建索引，其他语言从英文重新翻译，去掉了之前混在里面的英文段落和界面提示语）。名称和简短说明来自安装包的 `_locales`，会自动更新。截图不变。
+
+**Privacy practices**
+
+- 单一用途（Single purpose）换成：
+
+> A self-custody cryptocurrency wallet for Pearl (PRL) and Nockchain (NOCK): create or restore wallets from a recovery phrase, view balances and history, receive, and sign and send transactions on this device.
+
+- 权限理由：`storage`、`alarms`、`sidePanel`、`identity` 不变。「Host permission justification」整段换成下面这段（892 字符，限 1000）：
+
+> pearlhub.net: Pearl Hub's own PRL index (pearlhub.net/node) is asked first for balances, address history, UTXOs, fees and transaction status (sending the public account key and addresses) and receives confirmed signed transactions. Also public prices (no wallet identity) and the optional email account that syncs contacts; account data is encrypted at rest, readable by the server.
+> blockbook.pearlresearch.ai: Pearl's official indexer, the fallback when ours is unavailable or behind; confirmed signed transactions go to both.
+> blockbook.testnet.pearlresearch.ai: the same, testnet only.
+> 216.158.95.10 (optional): requested only when the user taps Allow on the NOCK page after rpc.nockbox.org could not be reached. A second Nockchain node (plain HTTP) for the NOCK balance, lookups and confirmed NOCK broadcasts; unused unless granted.
+> Seed phrases, private keys and passwords are never sent.
+
+- 远程代码：仍选 No。NOCK 核心是打包在插件里的 WebAssembly（`assets/nock_core-*.wasm`），CSP 的 `'wasm-unsafe-eval'` 只为加载它，不下载代码。
+- 数据使用：勾选项不变（个人身份信息、财务和付款信息、身份验证信息）。NOCK 地址、余额、记录和已签名的 NOCK 交易属于已经勾选的「财务和付款信息」。三项承诺不变。
+
+**Test instructions**（Additional instructions，486 字符，限 500）换成：
+
+> No account needed. Open the side panel, choose "Create wallet", write down the 12 words and set a password. To avoid real funds, set Wallet settings (sliders icon) > Wallet network to Testnet. Seed, keys and password never leave the device. NOCK: "NOCK Wallet" link at the bottom of the wallet page (mainnet only; viewing needs no funds). Sending and the optional donation broadcast real transactions only after a preview and password. Email sign-in is optional; contact sync needs Pro.

@@ -3,6 +3,6 @@
     "message": "PRL Wallet — Billetera de código abierto de Pearl Hub"
   },
   "description": {
-    "message": "Crear billetera · Restaurar billetera existente · Cifrado localmente · Firmado localmente"
+    "message": "Billetera local de PRL y NOCK con restauración, recepción y envío, contactos, precios públicos y claves cifradas."
   }
 }

@@ -3,6 +3,6 @@
     "message": "PRL 錢包 — Pearl Hub 推出的開源錢包"
   },
   "description": {
-    "message": "本機 PRL 錢包：建立、恢復、收付款、通訊錄、公開行情與金鑰加密。"
+    "message": "本機 PRL 與 NOCK 錢包：助記詞還原、收款與轉帳、聯絡人、公開行情價格，金鑰加密保存。"
   }
 }

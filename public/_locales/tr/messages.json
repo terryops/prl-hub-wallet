@@ -3,6 +3,6 @@
     "message": "PRL Wallet — Pearl Hub'ın açık kaynaklı cüzdanı"
   },
   "description": {
-    "message": "Cüzdan Oluştur · Mevcut cüzdanı geri yükle · Yerel olarak şifrelendi · Yerel olarak imzalandı"
+    "message": "Kurtarma, alma/gönderme, kişiler, herkese açık fiyatlar ve şifreli anahtarlar sunan yerel bir PRL ve NOCK cüzdanı."
   }
 }

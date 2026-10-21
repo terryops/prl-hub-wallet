@@ -57,7 +57,10 @@ export async function fixtureWallet({ output = "out/features", viewport = { widt
     if (panel.path !== "index.html") throw new Error("Wallet side panel is not configured");
     await worker.evaluate(({ address, testnet, to, language }) => {
       globalThis.fixture = { broadcasts: [], amount: "2500000000", offline: false };
+      // The extension's own files (the NOCK core's .wasm) load for real.
+      const packaged = globalThis.fetch;
       globalThis.fetch = async (url, init = {}) => {
+        if (String(url).startsWith("chrome-extension://")) return packaged(url, init);
         // Mainnet asks Pearl Hub's own index (pearlhub.net/node, with its key) and the official one.
         const u = new URL(String(url)), ownIndex = u.origin === "https://pearlhub.net" && u.pathname.startsWith("/node/"), p = ownIndex ? u.pathname.slice(5) : u.pathname;
         if (!ownIndex && !/^https:\/\/blockbook\.(?:testnet\.)?pearlresearch\.ai$/.test(u.origin)) throw new Error("Unexpected fixture host");

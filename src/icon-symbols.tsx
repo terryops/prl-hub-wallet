@@ -3,6 +3,9 @@
 import { iconSymbols as web } from "../shared/icon-symbols.tsx";
 export const iconSymbols = {
   ...web,
+  // A plain hexagon (not from Ionicons): the NOCK mark, like the native app's hexagon badge, so NOCK
+  // never passes for the PRL pearl.
+  hexagon: <path d="M256 40 443 148v216L256 472 69 364V148Z" />,
   // add-circle-outline.svg
   create: <><path d="M448 256c0-106-86-192-192-192S64 150 64 256s86 192 192 192 192-86 192-192Z" fill="none" stroke="currentColor" strokeMiterlimit="10" strokeWidth="32px" /><path d="M256 176v160M336 256H176" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="32px" /></>,
   // download-outline.svg

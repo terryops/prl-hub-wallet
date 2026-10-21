@@ -22,14 +22,28 @@ Pearl Hub publishes (version 0.1.2 and later) are built from it; see
 - There are no content scripts and no `externally_connectable`: web pages cannot reach
   the wallet or ask it to sign. The background worker accepts messages only from the
   extension's own page.
-- The content security policy allows connections to three sites only. Balances, history
+- The content security policy allows connections to six sites only; the extension has site
+  permissions for three of them, and a fourth only if you allow the backup Nockchain node
+  (below). Balances, history
   and broadcasts go first to Pearl Hub's own blockchain index at `pearlhub.net/node`, and
   to Pearl's official `blockbook.pearlresearch.ai` when ours is unavailable or behind
   (testnet: `blockbook.testnet.pearlresearch.ai` only). These queries receive the wallet's
   extended public key; signed transactions are broadcast to both. `pearlhub.net` also
   serves the PRL price and exchange rates (without any address or identity) and the
   optional email account, which syncs contacts with Pearl Hub Pro.
-- Contacts are stored unencrypted in the extension's local storage.
+- NOCK (Nockchain): the same recovery phrase also opens a NOCK address, derived as the
+  official Nockchain wallet does. Once you open NOCK, its balance comes from NockBox's public
+  node `rpc.nockbox.org` (requests carry identifiers derived from that address), NOCK
+  transactions signed in the extension are broadcast there, and the NOCK price comes from
+  `api.coingecko.com` without any address or identity. If `rpc.nockbox.org` can't be reached
+  (its gateway refuses some networks), the NOCK page offers the node the official Nockchain
+  wallet uses by default, `216.158.95.10` (plain HTTP, no CORS): Chrome then asks you for that
+  one optional site permission, and only once granted does the extension use it, as a second
+  node. The NOCK core is the native app's Rust
+  crate compiled to WebAssembly (`nock-core/`, `src/nock/nock_core.wasm`), which is why the
+  policy allows `'wasm-unsafe-eval'`.
+- Contacts, and the NOCK address and history, are stored unencrypted in the extension's
+  local storage.
 - Everything is bundled; no remote code is loaded. No ads, analytics or crash reporting.
 
 The wallet has not been independently audited. Back up every recovery phrase:

@@ -3,6 +3,6 @@
     "message": "PRL Wallet — Open source Wallet from Pearl Hub"
   },
   "description": {
-    "message": "A local PRL wallet with recovery, receive/send, contacts, public prices and encrypted keys."
+    "message": "A local PRL and NOCK wallet with recovery, receive/send, contacts, public prices and encrypted keys."
   }
 }

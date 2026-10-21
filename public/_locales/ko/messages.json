@@ -3,6 +3,6 @@
     "message": "PRL Wallet — Pearl Hub의 오픈소스 지갑"
   },
   "description": {
-    "message": "지갑 생성 · 기존지갑 복원 · 로컬에서 암호화됨 · 로컬에서 서명됨"
+    "message": "로컬 PRL·NOCK 지갑: 복구, 받기/보내기, 연락처, 공개 시세, 암호화된 키."
   }
 }

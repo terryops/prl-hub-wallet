@@ -4,6 +4,9 @@
 //   node scripts/store-release.mjs submit [--staged] upload pearl-hub-wallet-<version>-store.zip
 //                                                    and submit it for review; --staged waits for
 //                                                    a manual publish after approval
+//   node scripts/store-release.mjs upload            only upload it, as the draft (when the dashboard
+//                                                    must be edited for the new package first)
+//   node scripts/store-release.mjs publish [--staged] submit the uploaded draft for review
 //
 // Auth: the publisher's one service account (Developer Dashboard → Account), impersonated through
 // gcloud as the publisher's Google account, so no key file exists. Setup is in store/SUBMIT.md.
@@ -42,16 +45,14 @@ function report(s) {
   if (s.takenDown || s.warned) console.log(`policy: ${s.takenDown ? "taken down" : "warned"}`);
 }
 
-async function submit(staged) {
+async function upload() {
   const { version } = JSON.parse(await readFile(join(extension, "package.json"), "utf8"));
   const zip = join(extension, `pearl-hub-wallet-${version}-store.zip`);
   await access(zip).catch(() => { throw new Error(`${zip} is missing; run npm run package first`); });
   // The store rejects `key` and versions it has seen; check the package before uploading.
   const manifest = JSON.parse(execFileSync("unzip", ["-p", zip, "manifest.json"]).toString());
   if (manifest.version !== version || "key" in manifest) throw new Error(`${zip} has version ${manifest.version}${"key" in manifest ? " and a key" : ""}; expected the store package for ${version}`);
-  const before = await status();
-  if (before.submittedItemRevisionStatus?.state === "PENDING_REVIEW") throw new Error("A submission is already in review. Cancel it in the dashboard (or :cancelSubmission) first.");
-  if (before.publishedItemRevisionStatus?.distributionChannels?.some((c) => c.crxVersion === version)) throw new Error(`${version} is already published`);
+  await checkSubmittable(version);
 
   console.log(`uploading ${zip}`);
   const upload = await call(`/upload/v2/${NAME}:upload`, { method: "POST", headers: { "Content-Type": "application/zip" }, body: await readFile(zip) });
@@ -64,7 +65,15 @@ async function submit(staged) {
   if (state !== "SUCCEEDED") throw new Error(`Upload ${state}: ${JSON.stringify(upload)}`);
   if (crx && crx !== version) throw new Error(`The store read version ${crx} from the upload, expected ${version}`);
   console.log(`uploaded ${version}`);
-
+}
+async function checkSubmittable(version) {
+  const before = await status();
+  if (before.submittedItemRevisionStatus?.state === "PENDING_REVIEW") throw new Error("A submission is already in review. Cancel it in the dashboard (or :cancelSubmission) first.");
+  if (before.publishedItemRevisionStatus?.distributionChannels?.some((c) => c.crxVersion === version)) throw new Error(`${version} is already published`);
+}
+async function publish(staged) {
+  const { version } = JSON.parse(await readFile(join(extension, "package.json"), "utf8"));
+  await checkSubmittable(version);
   const published = await call(`/v2/${NAME}:publish`, { method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ publishType: staged ? "STAGED_PUBLISH" : "DEFAULT_PUBLISH" }) });
   console.log(`submitted: ${published.state}${staged ? " (staged: publish manually after approval)" : " (published automatically after approval)"}`);
@@ -75,8 +84,10 @@ async function submit(staged) {
 const [command = "status", ...flags] = process.argv.slice(2);
 try {
   if (command === "status") report(await status());
-  else if (command === "submit") await submit(flags.includes("--staged"));
-  else { console.error("Usage: node scripts/store-release.mjs status | submit [--staged]"); process.exit(2); }
+  else if (command === "submit") { await upload(); await publish(flags.includes("--staged")); }
+  else if (command === "upload") { await upload(); report(await status()); }
+  else if (command === "publish") await publish(flags.includes("--staged"));
+  else { console.error("Usage: node scripts/store-release.mjs status | submit [--staged] | upload | publish [--staged]"); process.exit(2); }
 } catch (error) {
   console.error(error.message); process.exit(1);
 }

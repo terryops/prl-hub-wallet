@@ -66,6 +66,8 @@ export const extensionSecurity: SecuritySection[] = [
   ] },
   { title: "extDirect", rows: [
     { icon: "cube", title: "explorer", text: "extExplorer" },
+    // The same seed's NOCK side: prl-hub-wallet src/nock/client.ts (rpc.nockbox.org) and nock/price.ts.
+    { icon: "server", title: "nockTitle", text: "extNock" },
     { icon: "lock", title: "extOthersTitle", text: "extOthers" },
   ] },
   { title: "inBrowser", rows: [

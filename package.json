@@ -1,13 +1,13 @@
 {
   "name": "pearl-hub-wallet",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "tsc --noEmit && vite build",
     "build:android": "tsc --noEmit && vite build --config vite.android.config.ts",
     "test": "node --experimental-strip-types --test test/*.test.ts",
-    "qa": "node test/browser.mjs && node test/features.mjs && node test/review-ui.mjs && node test/transactions.mjs",
+    "qa": "node test/browser.mjs && node test/features.mjs && node test/review-ui.mjs && node test/transactions.mjs && node test/nock.mjs",
     "qa:review": "npm run build && node test/review-ui.mjs",
     "package": "npm run build && python3 package.py",
     "qa:languages": "node test/languages.mjs",
@@ -18,7 +18,12 @@
     "store:screenshots": "node test/store-screenshots.mjs",
     "store:status": "node scripts/store-release.mjs status",
     "store:submit": "node scripts/store-release.mjs submit",
-    "sync:shared": "node scripts/sync-shared.mjs"
+    "store:upload": "node scripts/store-release.mjs upload",
+    "store:publish": "node scripts/store-release.mjs publish",
+    "sync:shared": "node scripts/sync-shared.mjs",
+    "sync:nock": "node scripts/sync-nock.mjs",
+    "build:nock": "scripts/build-nock.sh",
+    "qa:nock": "npm run build && node test/nock.mjs"
   },
   "dependencies": {
     "@scure/btc-signer": "2.4.1",

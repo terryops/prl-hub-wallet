@@ -13,7 +13,7 @@ prl-hub-wallet/  本仓库
 
 ## 安装开发测试版
 
-1. 解压 `pearl-hub-wallet-0.1.6.zip` 到固定目录。
+1. 解压 `pearl-hub-wallet-0.1.7.zip` 到固定目录。
 2. 打开 Chrome 的「扩展程序 → 管理扩展程序」，开启「开发者模式」。
 3. 点击「加载已解压的扩展程序」，选择解压后的目录。仓库内也可以直接选择 `dist/`。
 4. 将 PRL Wallet 固定到工具栏，点击图标打开侧边栏；右上角 ↗ 可打开完整页面。
@@ -334,3 +334,23 @@ SF Symbols 的授权只允许用于 Apple 平台的软件，不能随跨平台�
 ## 0.3.1 Pro 数据同步权限（2026-10-12）
 
 数据同步需要邮箱账号已关联有效 Pro 权益。免费账号登录后保留本机联系人，不读取或上传云端通讯录；购买／撤销权益后同步按钮相应启用／禁用。网站下载包已更新为 0.3.1，保持相同插件 ID。已有 0.3 同 ID 安装可覆盖安装目录并重新加载。扩展 107 项测试、正式构建和邮箱账号浏览器回归通过；生产下载 ZIP 与本机发布副本哈希一致。
+
+## NOCK（Nockchain）（2026-10-21，0.1.7）
+
+对应原生 App `prl-hub` 的 02e66bf（同一组助记词派生 NOCK，可收发）和 504fedc（第二个节点、更低调的入口、简化的收款页）。插件和 Android App 里的钱包是同一份代码，两边同时具备。
+
+**核心**：`nock-core/` 是原生 App `tools/nock-mobile` Rust crate 的副本（MIT；改动先在 prl-hub 做，再 `npm run sync:nock`，`-- --check` 只列差异），编成 WebAssembly 后提交在 `src/nock/nock_core.wasm`（约 1.16 MB，gzip 约 350 KB），所以构建插件不需要 Rust。`npm run build:nock` 用固定的工具链 1.99.1 重新编译、跑 crate 自带测试、重写 `public/licenses/nock-core.txt`；`npm run build:nock -- --check` 重新编译并与已提交的文件逐字节比较（清空缓存重编结果相同）。需要 rustup 和 protoc（`brew install rustup protobuf`）。WASM 里 panic 会直接中止，`src/nock/core.ts` 捕获后丢弃这个实例、下次重新加载。
+
+**代码**：`core.ts`（调用 WASM，JSON 进出）、`units.ts`（nick 与 NOCK 换算，1 NOCK = 65,536 nicks）、`client.ts`（gRPC-web、选节点、失败的节点歇 5 分钟、分页固定一个节点、广播发给所有节点、「查不到」要所有节点都说查不到）、`service.ts`（后台：按钱包的余额、记录、发送中的交易）、`errors.ts`、`price.ts`（CoinGecko 价格，缓存 5 分钟）、`NockView.tsx`（入口和页面）。后台命令 `nock-*` 不进 PRL 的队列，节点慢不会拖住 PRL。
+
+**节点**：插件直连 `rpc.nockbox.org`（它对任何来源都返回 CORS 头，不需要站点权限）。这个节点的网关会对部分网络线路返回 503（gRPC 14 "upstream connect error"，2026-10-21 实测同一台机器直连正常、走代理就 503），所以读取因节点不可用失败、且尚未授权时，NOCK 页会显示「允许使用备用节点」：点击后 `chrome.permissions.request` 申请可选权限 `http://216.158.95.10/*`（`optional_host_permissions`，可选权限不会让插件在更新时被停用），授权后 `client.ts` 每次请求前查 `chrome.permissions.contains`，把第二个节点加进来。CSP 已含 `http://216.158.95.10:5556`；实测带这项权限的插件 service worker 能取到这个明文 HTTP 节点的数据，没有权限时请求失败。Android 另外经外壳的 `nock.rpc` 连 `216.158.95.10:5556`（明文 HTTP、无 CORS；外壳只对这一个地址放行明文，同 iOS 的 ATS 例外）。CSP：`script-src` 加 `'wasm-unsafe-eval'`，`connect-src` 加 `'self'`（读取打包的 .wasm）、`rpc.nockbox.org`、`api.coingecko.com`；Android 的 CSP 在 prl-hub-web 的 `web/scripts/build-android.mjs`。
+
+**存储与发送**：每个钱包的 NOCK 地址、余额、记录（最多 1000 条）和发送中的交易明文存在 `chrome.storage.local` 的 `nock.state.<钱包 id>`（同 iOS 的 UserDefaults、本插件的通讯录），移除钱包时一起删除；不存私钥。转账在「预览」时就在后台签好（结果放 session，10 分钟有效，锁定即清除），确认时再验证密码（Android：锁屏验证）才广播。广播前先把输入记为占用；只有节点明确拒绝才释放，结果不明时提示不要重复发送，并在核实前不能发新的一笔。
+
+**与 iOS 的不同**：记录直接列在 NOCK 页，没有单独的「记录」页；插件的第二个节点要用户授权一次（iOS 和 Android 直接用）。
+
+**MAX 与发给自己**：Rust 核心 `buildSend` 发给自己且 `sweep: true` 时，构建器只花一部分 note，核心的记账检查不通过，返回 `internal: unbalanced transaction`（签名前就拒绝，不涉及资金）。所以 MAX 的估算在收款地址为空、无效或是自己时改用一个公开测试地址（`service.ts` `QUOTE_ADDRESS`，手续费与任何其他地址相同）。iOS 原先用自己的地址估算，先点 MAX 会报错；2026-10-21 已同样修正（`NockWalletStore.quoteRecipient`，测试 `maxQuoteRecipient`）。真的把全部余额转给自己仍会被核心拒绝。
+
+**验证**：`test/nock-core.test.ts` 用原生构建的 27 组请求/回复（`nock-core/tests/vectors.rs` 生成的 `test/nock-vectors.json`，含签名交易）逐字节核对 WASM；`test/nock-service.test.ts` 用替身节点测余额、到账记录、发送、结果不明、拒绝、丢弃、删除钱包；`test/nock.mjs`（`npm run qa:nock`，已并入 `npm run qa`）在真实 Chromium 插件里用替身节点（`test/nock-fixtures.json`）走完入口、页面、收款、转账、密码错误、MAX、结果不明、详情、离线、nockbox 返回 503 时提出并（授权后）使用备用节点、16 种语言 320 px。另用真实节点只读验证过两个节点的余额、交易详情、区块时间和 mempool 查询；prl-hub-android 的 `qa/nock.mjs` 在模拟器上验证了 CSP 下的 WASM、两个节点（屏蔽 rpc.nockbox.org 后经 `nock.rpc` 读取）。没有发送过真实交易。
+
+**商店资料（0.1.7）**：简短说明（`_locales` 和 `store/*.json`）加上 NOCK；英文详细说明加了 NOCK 一段，并把「Blockbook 接收查询」改成先走自建索引；其他 15 种语言的详细说明、权限理由和数据使用说明按英文重新翻译（之前的版本由界面提示语拼成，还夹着英文段落）。`permissionJustifications` 多了可选权限 `http://216.158.95.10/*`，`test/store.test.ts` 要求可选权限也有理由。后台要手动改的单一用途、主机权限理由和审核说明见 `store/SUBMIT.md` 第八节；`scripts/store-release.mjs` 新增 `upload`（只传草稿）和 `publish`（提交已上传的草稿），用于先传包、改后台、再提交。

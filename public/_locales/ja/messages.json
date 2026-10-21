@@ -3,6 +3,6 @@
     "message": "PRL Wallet — Pearl Hub のオープンソースウォレット"
   },
   "description": {
-    "message": "ウォレットを作成 · 既存のウォレットを復元 · 端末内で暗号化 · 端末内で署名"
+    "message": "端末内で動く PRL・NOCK ウォレット。復元、受取・送金、連絡先、公開相場の表示、鍵の暗号化に対応。"
   }
 }

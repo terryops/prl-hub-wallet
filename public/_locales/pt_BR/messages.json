@@ -3,6 +3,6 @@
     "message": "PRL Wallet — Carteira de código aberto da Pearl Hub"
   },
   "description": {
-    "message": "Criar carteira · Restaurar carteira existente · Criptografado localmente · Assinado localmente"
+    "message": "Carteira local de PRL e NOCK com recuperação, envio e recebimento, contatos, preços públicos e chaves criptografadas."
   }
 }

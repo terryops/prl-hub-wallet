@@ -29,6 +29,12 @@ export async function nativePost(url: string, body: string, contentType: string)
   return { ok: result.status >= 200 && result.status < 300, status: result.status, json: async () => JSON.parse(result.body) };
 }
 
+// The second Nockchain node is plain HTTP without CORS headers: the shell posts the framed gRPC-web
+// request for us (BRIDGE.md `nock.rpc`). Bodies cross as base64; grpcMessage arrives percent-encoded.
+export function nativeNockRpc(node: string, path: string, body: string, timeout: number) {
+  return nativeCall<{ status: number; body: string; grpcStatus: string | null; grpcMessage: string | null }>("nock.rpc", { node, path, body, timeout }, timeout + 5000);
+}
+
 export { BridgeError };
 
 // The wallet half of the widget snapshot (BRIDGE.md "Widget snapshot"): sent when it changed, and

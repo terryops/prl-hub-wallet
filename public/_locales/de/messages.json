@@ -3,6 +3,6 @@
     "message": "PRL Wallet — Open-Source-Wallet von Pearl Hub"
   },
   "description": {
-    "message": "Wallet erstellen · Vorhandene Wallet wiederherstellen · Lokal verschlüsselt · Lokal signiert"
+    "message": "Lokale PRL- und NOCK-Wallet mit Wiederherstellung, Empfangen/Senden, Kontakten, öffentlichen Kursen und verschlüsselten Schlüsseln."
   }
 }
