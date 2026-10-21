@@ -99,7 +99,7 @@
 
 **0.1.5 改了数据流向**（余额、记录和广播先走我们自建的区块索引 pearlhub.net/node）。提交 0.1.5 前先在后台「Privacy practices」里把 `pearlhub.net` 和 `blockbook.pearlresearch.ai` 的权限理由换成上表的新文字（三个主机权限合计 960 字符，限 1000），并核对数据使用说明；API 只上传安装包，不改这些文字。隐私政策 https://pearlhub.net/privacy 也要先更新（`prl-hub/site/privacy.html`）。
 
-新版本不用再开商店后台：`scripts/store-release.mjs` 通过 Chrome Web Store API v2 上传商店包并提交审核。Chrome 不允许任何扩展操作商店后台页面，所以浏览器自动化做不了这一步。
+新版本不用再开商店后台：`scripts/store-release.mjs` 通过 Chrome Web Store API v2 上传商店包并提交审核。Chrome 不允许任何扩展操作商店后台页面，所以浏览器扩展做不了这一步；后台文字要改时，见第八节末尾用独立 Chrome 窗口 + DevTools 协议的做法。
 
 ```sh
 npm run store:status   # 已发布和审核中的版本
@@ -139,3 +139,7 @@ node scripts/store-release.mjs submit --staged   # 审核通过后先暂存，�
 **Test instructions**（Additional instructions，486 字符，限 500）换成：
 
 > No account needed. Open the side panel, choose "Create wallet", write down the 12 words and set a password. To avoid real funds, set Wallet settings (sliders icon) > Wallet network to Testnet. Seed, keys and password never leave the device. NOCK: "NOCK Wallet" link at the bottom of the wallet page (mainnet only; viewing needs no funds). Sending and the optional donation broadcast real transactions only after a preview and password. Email sign-in is optional; contact sync needs Pro.
+
+**已完成（2026-10-21）**：`store:upload` 传了 0.1.7 草稿；后台 16 种语言的详细说明、单一用途、主机权限理由逐项填入并 Save draft，重新加载后逐字核对一致；审核说明在单独的 Test instructions 页（`…/testcredentials`，点 Edit 再点 Save changes，立即生效，不属于草稿）；数据使用勾选、远程代码「No」、隐私政策网址未动。然后 `npm run store:publish` 提交审核，状态 PENDING_REVIEW 0.1.7，通过后自动发布。
+
+做法：另开一个 Chrome（`--user-data-dir=~/.cache/cws-devconsole-profile --remote-debugging-port=9335`，不是日常的 Chrome 资料），发布者账号 breathlex@gmail.com 在里面手动登录一次，之后用 Playwright `connectOverCDP` 操作后台页面（本机有代理，连 127.0.0.1 时要设 `NO_PROXY=127.0.0.1`）。语言切换是「Current editing language」下拉框，每种语言改完先 Save draft 再换下一种。
