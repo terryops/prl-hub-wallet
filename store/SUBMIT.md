@@ -154,3 +154,5 @@ node scripts/store-release.mjs submit --staged   # 审核通过后先暂存，�
 - **Test instructions**：不变。
 
 顺序同 0.1.7：`npm run store:upload` 传草稿 → 后台改详细说明并 Save draft → `npm run store:publish` 提交审核。
+
+**已完成（2026-10-27）**：`store:upload` 传了 0.1.8 草稿（含 eeead3a 的「全部」修正，第一次上传的 9dd2363 包被覆盖）；后台 16 种语言的详细说明逐个换成 `store/<语言>.json`，每种语言改前先确认后台原文就是 v0.1.7 的 `store/*.json`，改完 Save draft，重新加载后 16 种逐字核对一致（脚本在忽略的 `out/store-0.1.8/edit.mjs`）。隐私政策 https://pearlhub.net/privacy 已先上线（prl-hub-web wallet-018 发布，Worker 版本 ff74d7f3）。然后 `npm run store:publish` 提交审核，状态 PENDING_REVIEW 0.1.8，通过后自动发布。后台登录过期时，独立 Chrome 资料要发布者本人重新登录。
