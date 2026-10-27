@@ -236,7 +236,7 @@ export function NockPage({ lang, rpc, walletId, secondary, rates, copy, onBack, 
     </div>
     {/* iOS NockWalletView.recent: a small card with the last three, 全部 once there are any. */}
     <section className="nock-recent">
-      <div className="nock-recent-head"><span>{t("最近交易")}</span>{status.history.length > 0 && <button className="text-button" onClick={() => setPanel("history")}>{t("全部")}</button>}</div>
+      <div className="nock-recent-head"><span>{t("最近交易")}</span>{status.history.length > 0 && <button className="text-button" onClick={() => setPanel("history")}>{t("全部交易")}</button>}</div>
       {!status.history.length ? <p className="nock-recent-empty">{status.backendReady ? t("暂无交易记录") : problemLine || t("同步中…")}</p> : status.history.slice(0, 3).map(row)}
     </section>
     <footer className="nock-seed-note"><span><Icon name="key" />{t("和 PRL 共用助记词")}</span><small>{t("用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。")}</small></footer>

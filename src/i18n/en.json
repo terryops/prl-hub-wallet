@@ -275,6 +275,7 @@
   "NOCK 记录": "NOCK History",
   "记录": "History",
   "最近交易": "Recent Transactions",
+  "全部交易": "All",
   "暂无交易记录": "No transactions yet",
   "你的收发记录会显示在这里": "Your send and receive history appears here",
   "用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。": "It uses the same recovery phrase: import it into the official Nockchain wallet or Iris and you'll see this same NOCK address.",

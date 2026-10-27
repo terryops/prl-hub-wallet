@@ -275,6 +275,7 @@
   "NOCK 记录": "Historial NOCK",
   "记录": "Historial",
   "最近交易": "Transacciones recientes",
+  "全部交易": "Todo",
   "暂无交易记录": "Aún no hay transacciones",
   "你的收发记录会显示在这里": "Aquí aparecerá tu historial de envíos y recepciones",
   "用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。": "Usa la misma frase de recuperación: impórtala en la billetera oficial de Nockchain o en Iris y verás esta misma dirección NOCK.",

@@ -366,6 +366,7 @@ SF Symbols 的授权只允许用于 Apple 平台的软件，不能随跨平台�
 - **发出金额**：一笔交易里还有别人的输入时（联合交易、归集），历史列表的发出金额以本钱包的净流出为上限，以前会显示别人那部分（`src/chain.ts`，和 pearlhub.net 的 Worker 2026-10-26 的修复同一规则）。普通转账不受影响。
 - **通讯录同步**：账户里有「到达目标价」（`reach`）价格提醒时，0.1.7 的 `shared/store.ts` 把整份配置判为 `invalid_config`，同步失败（与 0.1.3 的 Jetski 是同一类问题）。`npm run sync:shared` 带来了 web 现在的 `store.ts` / `types.ts`；`shared/security-overview-locales.json` 保留本仓库的版本（`extNock`、`extOthers` 加了 nockscan.com），web 那边在 wallet-018 发布里改成同一份。
 - 捐赠页预设金额下面的提示不再和按钮重叠。
+- NOCK「最近交易」的「全部」用自己的文案键「全部交易」（译文同原生 App 的「全部」，英文 All）。最初沿用了转账页 MAX 按钮的「全部」，英文等 13 种语言显示成「Max」。
 
 **Android App 里的钱包（同一份代码，`ANDROID` 分支）**
 
@@ -373,4 +374,4 @@ SF Symbols 的授权只允许用于 Apple 平台的软件，不能随跨平台�
 
 **商店与说明**：`store/*.json` 16 种语言的详细说明和数据使用说明加了 nockscan.com；`public/privacy.html`、README 同步。后台要改的内容见 `store/SUBMIT.md` 第九节。
 
-**验证**：`npm test` 176/176（新增：账户里有 reach 提醒时同步成功且原样保留；有别人输入的发出金额只算本钱包的部分，两项在改动前都失败）、`tsc --noEmit`、插件与 Android 构建；浏览器 QA `browser` 15、`features` 8、`review-ui` 6、`transactions` 6、`nock` 9 项、`languages` 16 种语言，全部通过。
+**验证**：`npm test` 177/177（新增：账户里有 reach 提醒时同步成功且原样保留；有别人输入的发出金额只算本钱包的部分，两项在改动前都失败；NOCK 页的「全部」不是 MAX 的文案，`test/nock.mjs` 也检查英文显示 All）、`tsc --noEmit`、插件与 Android 构建；浏览器 QA `browser` 15、`features` 8、`review-ui` 6、`transactions` 6、`nock` 9 项、`languages` 16 种语言，全部通过。

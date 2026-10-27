@@ -46,3 +46,11 @@ test('wallet service errors and UI source strings all have translations', () => 
     visit(ast);
   }
 });
+test("the NOCK page's All link is not the send form's Max", () => {
+  // 0.1.8 first reused 全部 (the send form's MAX button), so the recent card's link read "Max" in English.
+  const view = readFileSync(new URL("../src/nock/NockView.tsx", import.meta.url), "utf8");
+  assert.ok(!view.includes('t("全部")')); assert.ok(view.includes('t("全部交易")'));
+  // The native app's 全部 (Sources/*.lproj/Localizable.strings). Turkish and Korean say the same for Max.
+  const all: Record<string, string> = { en: "All", ru: "Все", "zh-Hans": "全部", "zh-Hant": "全部", vi: "Tất cả", id: "Semua", es: "Todo", "pt-BR": "Tudo", fr: "Tout", de: "Alle", it: "Tutto", tr: "Tümü", ja: "すべて", ko: "전체", hi: "सभी", th: "ทั้งหมด" };
+  for (const lang of languages) assert.equal(dictionaries[lang]["全部交易" as TextKey], all[lang], lang);
+});

@@ -205,6 +205,8 @@ try {
   await page.locator(".nock-strip").filter({ hasText: "NOCK" }).click();
   await page.locator(".nock-back").filter({ hasText: "PRL Wallet" }).waitFor();
   await page.locator(".nock-recent-head").filter({ hasText: "Recent Transactions" }).waitFor();
+  // The link to the full history, not the send form's "Max" (0.1.8's first build reused that string).
+  assert.equal((await page.locator(".nock-recent-head .text-button").innerText()).trim(), "All");
   await shots("page-en");
   // Every language fits at 320 px: the page, the send form and the receipt.
   // A fresh read finds the earlier "lost" send at a node (the stand-in now says accepted), which frees new sends.

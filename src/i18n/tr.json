@@ -275,6 +275,7 @@
   "NOCK 记录": "NOCK Geçmişi",
   "记录": "Geçmiş",
   "最近交易": "Son İşlemler",
+  "全部交易": "Tümü",
   "暂无交易记录": "Henüz işlem yok",
   "你的收发记录会显示在这里": "Gönderme ve alma geçmişiniz burada görünür",
   "用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。": "Aynı kurtarma ifadesi kullanılır: resmi Nockchain cüzdanına veya Iris’e içe aktarırsanız aynı NOCK adresini görürsünüz.",
