@@ -1,6 +1,6 @@
 // NOCK (Nockchain) in the real extension: the WebAssembly core, the background service and the page, with
-// stand-in Nockchain nodes (canned replies from nock-core tests/vectors.rs) and a stand-in price. Nothing
-// reaches a real node; no transaction leaves the browser.
+// stand-in Nockchain nodes (canned replies from nock-core tests/vectors.rs), a stand-in nockscan.com (no
+// history yet) and a stand-in price. Nothing reaches a real node or nockscan; no transaction leaves the browser.
 import assert from "node:assert/strict";
 import { readFile, mkdir } from "node:fs/promises";
 import { fixtureWallet, fits } from "./qa-support.mjs";
@@ -18,7 +18,7 @@ await context.route(/^https:\/\/api\.coingecko\.com\//, async (route) => {
   await route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify({ nockchain: { usd: 0.02285086 } }) });
 });
 await worker.evaluate((fx) => {
-  globalThis.nockFixture = { calls: [], cli: 0, sends: [], offline: false, lose: false, accepted: true, nockboxDown: false, granted: false };
+  globalThis.nockFixture = { calls: [], scans: 0, cli: 0, sends: [], offline: false, lose: false, accepted: true, nockboxDown: false, granted: false };
   // The second node's optional permission, as Chrome would report it once granted.
   chrome.permissions.contains = async () => nockFixture.granted;
   const b64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
@@ -31,6 +31,8 @@ await worker.evaluate((fx) => {
   const chain = globalThis.fetch;
   globalThis.fetch = async (url, init = {}) => {
     const u = new URL(String(url));
+    // nockscan.com knows nothing of this address yet: its 404, which the wallet reads as no history.
+    if (u.origin === "https://nockscan.com") { nockFixture.scans++; return new Response(JSON.stringify({ error: "Address not found" }), { status: 404, headers: { "content-type": "application/json" } }); }
     if (u.origin !== "https://rpc.nockbox.org" && u.origin !== "http://216.158.95.10:5556") return chain(url, init);
     if (u.origin === "http://216.158.95.10:5556") { if (!nockFixture.granted) throw new TypeError("Failed to fetch"); nockFixture.cli++; }
     // rpc.nockbox.org's gateway when its node is unreachable from this network: trailers-only UNAVAILABLE.
@@ -65,25 +67,33 @@ try {
   // A wallet that never used NOCK: only the quiet link, and no Nockchain request at all.
   const link = page.locator(".nock-link");
   await link.waitFor();
-  assert.match(await link.innerText(), /NOCK 钱包\s*·\s*和 PRL 共用助记词/);
+  assert.equal((await link.innerText()).trim(), "NOCK 钱包");
   assert.equal(await page.locator(".nock-strip").count(), 0);
   await page.waitForTimeout(500);
   assert.equal(await calls(), 0, "the wallet page reads nothing from Nockchain until NOCK is used");
+  assert.equal(await worker.evaluate(() => nockFixture.scans), 0, "nor from nockscan");
   assert.equal(prices.length, 0);
   await shots("wallet-link");
   console.log("PASS link only, no Nockchain reads before use");
 
-  // The NOCK page: balance from both lock kinds, locked block rewards apart, a row per note.
+  // The NOCK page (iOS NockWalletView): balance from both lock kinds, locked block rewards on their own
+  // row, 收款 · 转账 · 记录, the last three under 最近交易; 全部 lists a row per note.
   await link.click();
-  await page.locator(".nock-hero .balance-number").filter({ hasText: /^155$/ }).waitFor();
-  await page.locator(".nock-hero .price-chip").filter({ hasText: "$0.0229" }).waitFor();
-  await page.locator(".nock-hero .fiat").filter({ hasText: "≈ $3.54" }).waitFor();
-  await page.locator(".nock-info strong").filter({ hasText: "可用 85 NOCK" }).waitFor();
-  await page.locator(".nock-info p").filter({ hasText: "其中 70 NOCK 是挖矿收入，要等 100 个区块才能使用。下一笔解锁还要约 2 小时。" }).waitFor();
-  assert.deepEqual((await page.locator(".nock-row .tx-main strong").allInnerTexts()).sort(), ["收到", "收到", "挖矿收入", "挖矿收入"].sort());
-  await page.locator(".nock-footnote").waitFor();
+  await page.locator(".nock-summary .balance-number").filter({ hasText: /^155$/ }).waitFor();
+  await page.locator(".nock-summary .nock-price").filter({ hasText: "$0.0229" }).waitFor();
+  await page.locator(".nock-summary .fiat").filter({ hasText: "≈ $3.54" }).waitFor();
+  assert.deepEqual((await page.locator(".nock-locked > div").allInnerTexts()).map((r) => r.replace(/\s+/g, " ").trim()), ["可用 85 NOCK", "锁定 · 挖矿收入约 4 小时后可用 70 NOCK"]); // 100 blocks at 150 s, as on iOS
+  assert.deepEqual(await page.locator(".nock-actions button").allInnerTexts(), ["收款", "转账", "记录"]);
+  await page.locator(".nock-recent-head").filter({ hasText: "最近交易" }).waitFor();
+  assert.equal(await page.locator(".nock-recent .nock-row").count(), 3);
+  assert.equal(await page.locator(".nock-footnote").count(), 0, "the nockscan note is on the history page, as on iOS");
+  assert.ok(await worker.evaluate(() => nockFixture.scans) > 0, "history asked of nockscan once NOCK is open");
   await shots("page");
-  console.log("PASS page: 155 NOCK (85 available, 70 locked ~2 h), price and fiat, 4 rows");
+  await page.locator(".nock-recent-head").getByRole("button", { name: "全部", exact: true }).click();
+  assert.deepEqual((await dialog().locator(".nock-history .nock-row .tx-main strong").allInnerTexts()).sort(), ["收到", "收到", "挖矿收入", "挖矿收入"].sort());
+  await dialog().locator(".nock-footnote").filter({ hasText: "nockscan.com" }).waitFor();
+  await dialog().getByRole("button", { name: "关闭", exact: true }).click();
+  console.log("PASS page: 155 NOCK (85 available, 70 locked ~4 h), price and fiat, 3 recent rows, 4 in 全部");
 
   // Receive: the address of the same seed; getting it marks the wallet as using NOCK.
   await button("收 NOCK").click();
@@ -126,7 +136,7 @@ try {
   await page.locator(".nock-row").first().locator("strong").filter({ hasText: "发出" }).waitFor();
   await page.locator(".nock-row").first().locator(".nock-pending").filter({ hasText: "待确认" }).waitFor();
   // The 50 NOCK note is held by the send: 35 left to spend; its change counts in the total.
-  const total = await page.locator(".nock-hero .balance-number").innerText();
+  const total = await page.locator(".nock-summary .balance-number").innerText();
   assert.ok(Math.abs(Number(total.replace(/,/g, "")) - (115 - fee)) < 0.0001, `${total} vs 115 − ${fee}`);
   console.log(`PASS send: address/amount checks, receipt, wrong password refused, one broadcast, pending row, total ${total}`);
 
@@ -156,13 +166,13 @@ try {
   await page.locator(".nock-row").first().click();
   await dialog().locator(".receipt-row").filter({ hasText: "类型" }).filter({ hasText: "发出" }).waitFor();
   await dialog().locator(".grouped-address").waitFor();
-  assert.match(await dialog().locator("a").filter({ hasText: "在浏览器中查看" }).getAttribute("href"), /^https:\/\/nockscan\.net\/tx\/[1-9A-HJ-NP-Za-km-z]+$/);
+  assert.match(await dialog().locator("a").filter({ hasText: "在浏览器中查看" }).getAttribute("href"), /^https:\/\/nockscan\.com\/tx\/[1-9A-HJ-NP-Za-km-z]+$/);
   await shots("detail");
   await dialog().getByRole("button", { name: "关闭", exact: true }).click();
 
   // Offline: the last data stays, with what went wrong.
   await worker.evaluate(() => { nockFixture.offline = true; });
-  await page.locator(".nock-hero .balance-heading button").click();
+  await page.locator(".nock-summary .balance-heading button").click();
   await page.locator(".nock-problem").filter({ hasText: /无法连接 Nockchain 节点，显示的是 .+ 的数据/ }).waitFor({ timeout: 15000 });
   await worker.evaluate(() => { nockFixture.offline = false; });
   console.log("PASS details and offline");
@@ -170,7 +180,7 @@ try {
   // rpc.nockbox.org unreachable from this network: the page offers the second node; allowing it (Chrome's own
   // prompt, stubbed here) makes the next read go there.
   await worker.evaluate(() => { nockFixture.nockboxDown = true; });
-  await page.locator(".nock-hero .balance-heading button").click();
+  await page.locator(".nock-summary .balance-heading button").click();
   const offer = page.locator(".nock-offer");
   await offer.filter({ hasText: "rpc.nockbox.org 现在连不上" }).waitFor({ timeout: 15000 });
   await page.locator(".nock-problem").filter({ hasText: "Nockchain 节点暂时不可用（HTTP 503）" }).waitFor();
@@ -194,7 +204,7 @@ try {
   await rpc("touch"); await worker.evaluate(() => chrome.storage.local.set({ language: "en" }));
   await page.locator(".nock-strip").filter({ hasText: "NOCK" }).click();
   await page.locator(".nock-back").filter({ hasText: "PRL Wallet" }).waitFor();
-  await page.locator("h2").filter({ hasText: "NOCK History" }).waitFor();
+  await page.locator(".nock-recent-head").filter({ hasText: "Recent Transactions" }).waitFor();
   await shots("page-en");
   // Every language fits at 320 px: the page, the send form and the receipt.
   // A fresh read finds the earlier "lost" send at a node (the stand-in now says accepted), which frees new sends.
@@ -205,7 +215,7 @@ try {
     await worker.evaluate((language) => chrome.storage.local.set({ language }), language);
     await page.waitForFunction((language) => document.documentElement.lang === language, language);
     await fits(page, `NOCK page ${language} 320`);
-    await page.locator(".balance-actions button").nth(1).click();
+    await page.locator(".nock-actions button").nth(1).click();
     await dialog().locator("textarea").fill(fx.recipient); await dialog().locator('input[inputmode="decimal"]').fill("0.5");
     await fits(page, `NOCK send ${language} 320`);
     await page.waitForFunction(() => !document.querySelector("dialog.nock-dialog button.primary")?.disabled);

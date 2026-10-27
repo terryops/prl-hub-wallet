@@ -267,9 +267,14 @@ async function handle(m: Message, epoch: number) {
   }
   if (m.command === "rename") {
     const name = text(m.name).trim(); if (!name || name.length > 40) throw new Error("钱包名称应为 1–40 个字符。");
-    w.name = name; await save(data); return status();
+    // The Android wallet list renames any wallet, as iOS's 管理钱包 does; otherwise the selected one.
+    const target = ANDROID && m.id ? data.wallets.find((x) => x.id === m.id) : w;
+    if (!target) throw new Error("钱包不存在。");
+    target.name = name; await save(data); return status();
   }
   if (m.command === "receive") { w.receiveIndex = (w.receiveIndex + 1) % 10; await save(data); return status(); }
+  // The iOS app's 回到主地址 (and its relaunch back to #0).
+  if (ANDROID && m.command === "receive-main") { if (w.receiveIndex) { w.receiveIndex = 0; await save(data); } return status(); }
   if (m.command === "backup") {
     const verified = await passwordData(text(m.password));
     stillActive(); await session();
@@ -339,7 +344,9 @@ async function handle(m: Message, epoch: number) {
     if (m.recovery === true && !utxos.length) throw new Error("没有可归集的已确认找零。");
     const fee = Number(m.fee);
     const amount = m.donation === true ? donationAmount(text(m.amount)) : m.max === true || m.recovery === true ? maxAmount(utxos, fee) : parseAmount(text(m.amount));
-    const to = m.recovery === true ? derived(xpub(w.mnemonic, data.network), data.network, 0, 0).address! : m.donation === true ? DONATION_ADDRESS : text(m.to).trim();
+    // iOS 找回搁浅的找零 can send to another address too (Android: recoveryTo); otherwise the main address.
+    const recoveryTo = ANDROID && m.recovery === true && m.recoveryTo ? text(m.recoveryTo).trim().toLowerCase() : "";
+    const to = m.recovery === true ? recoveryTo || derived(xpub(w.mnemonic, data.network), data.network, 0, 0).address! : m.donation === true ? DONATION_ADDRESS : text(m.to).trim();
     const plan = planTransaction(xpub(w.mnemonic, data.network), data.network, to, amount, fee, utxos);
     const review: Review = { id: crypto.randomUUID(), walletId: w.id, network: data.network, to: plan.to, amount: amount.toString(), fee: plan.fee.toString(), change: plan.change.toString(), feePerKB: fee, utxos: plan.selected, expires: Date.now() + 3 * 60000 };
     if (m.donation === true) review.donation = true;
@@ -398,7 +405,7 @@ async function handle(m: Message, epoch: number) {
 async function nock(m: Message, w: Wallet, stillActive: () => void) {
   switch (m.command) {
     case "nock-status": return nockStatus(w.id);
-    case "nock-refresh": return nockRefresh(w.id, w.mnemonic, typeof m.stale === "number" && Number.isFinite(m.stale) ? m.stale : 0);
+    case "nock-refresh": return nockRefresh(w.id, w.mnemonic, typeof m.stale === "number" && Number.isFinite(m.stale) ? m.stale : 0, m.history === true);
     case "nock-shown": return nockShown(w.id, w.mnemonic);
     case "nock-check": return nockCheck(w.id, w.mnemonic, text(m.address));
     case "nock-prepare": return nockPrepare(w.id, w.mnemonic, text(m.to), text(m.amount), m.max === true);

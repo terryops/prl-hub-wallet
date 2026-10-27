@@ -22,6 +22,19 @@ test("used xpub token outside signing scan is recognized as own in self-send his
     assert.equal(result.history[0].address, ""); assert.equal(result.history[0].delta, "-100"); assert.equal(result.history[0].sent, true);
   } finally { globalThis.fetch = original; }
 });
+test("a send that also spends someone else's coins shows only what left this wallet", async () => {
+  const original = globalThis.fetch, own = vectors.addresses[0], change = derived(vectors.xpub, "mainnet", 1, 0).address!;
+  const joint = { txid: "88".repeat(32), blockTime: 200, vin: [{ addresses: [own], value: "1000" }, { addresses: ["other"], value: "9000" }], vout: [{ addresses: ["dest"], value: "9900" }], fees: "100" };
+  const plain = { txid: "99".repeat(32), blockTime: 100, vin: [{ addresses: [own], value: "1000" }], vout: [{ addresses: ["dest"], value: "600" }, { addresses: [change], value: "300" }], fees: "100" };
+  globalThis.fetch = async url => Response.json(String(url).includes("/utxo/") ? [] : { balance: "0", transactions: [joint, plain] });
+  try {
+    const [a, b] = (await loadAccount(vectors.xpub, "mainnet", "test", [])).history;
+    // The joint send paid 9,900 to others, but only 1,000 of it was this wallet's.
+    assert.equal(a.txid, joint.txid); assert.equal(a.sent, true); assert.equal(a.amount, "1000"); assert.equal(a.delta, "-1000");
+    // An ordinary send is unchanged: what went to others, the fee shown on its own.
+    assert.equal(b.txid, plain.txid); assert.equal(b.amount, "600"); assert.equal(b.delta, "-700");
+  } finally { globalThis.fetch = original; }
+});
 test("recursive legacy change is found; overlapping UTXOs/history are counted once", async () => {
   const original = globalThis.fetch;
   const c0 = derived(vectors.xpub, "mainnet", 1, 0).address!;

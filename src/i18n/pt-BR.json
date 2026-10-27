@@ -273,6 +273,8 @@
   "同步余额…": "Sincronizando saldo…",
   "同步中…": "Sincronizando…",
   "NOCK 记录": "Histórico NOCK",
+  "记录": "Histórico",
+  "最近交易": "Transações recentes",
   "暂无交易记录": "Nenhuma transação ainda",
   "你的收发记录会显示在这里": "Seu histórico de envios e recebimentos aparece aqui",
   "用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。": "Usa a mesma frase de recuperação: importe-a na carteira oficial da Nockchain ou na Iris e você verá este mesmo endereço NOCK.",
@@ -336,5 +338,10 @@
   "无法连接 Nockchain 节点": "Não foi possível conectar ao nó da Nockchain",
   "记录由本机保存：收到的每一笔从本机第一次看到它时算起，换设备或重装后只能看到当前持有的部分。": "O histórico fica neste dispositivo: cada recebimento é registrado quando este dispositivo o vê pela primeira vez. Em outro dispositivo ou após reinstalar, só aparece o que você tem agora.",
   "rpc.nockbox.org 现在连不上。可以允许插件在它连不上时改用 Nockchain 官方钱包默认使用的节点（216.158.95.10）；这个节点走明文 HTTP，网络路径上的其他人能看到这些请求。浏览器会请你确认。": "No momento não é possível conectar ao rpc.nockbox.org. Você pode permitir que a extensão use, quando isso acontecer, o nó que a carteira oficial da Nockchain usa por padrão (216.158.95.10). Ele usa HTTP sem criptografia, então outras pessoas no caminho da rede podem ver essas solicitações. O navegador vai pedir sua confirmação.",
-  "允许使用备用节点": "Permitir o nó reserva"
+  "允许使用备用节点": "Permitir o nó reserva",
+  "可用": "Disponível",
+  "锁定 · 挖矿收入约 {count} 小时后可用": "Bloqueado · recompensas de bloco, disponíveis após ~{count} h",
+  "记录从区块浏览器 nockscan.com 读取，换设备或重装后也能看到。": "O histórico é lido do explorador de blocos nockscan.com, então continua aparecendo em outro dispositivo ou após reinstalar.",
+  "正在检查历史找零…": "Verificando troco histórico…",
+  "历史找零已检查完毕，余额已更新。": "Troco histórico verificado. Saldo atualizado."
 }

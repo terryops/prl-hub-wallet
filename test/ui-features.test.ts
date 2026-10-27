@@ -14,6 +14,7 @@ import * as accountCopy from "../shared/account-copy.ts";
 import * as i18n from "../src/i18n/index.ts";
 import * as transactions from "../src/transactions.ts";
 import * as receipt from "../src/receipt.ts";
+import androidCopy from "../src/android/copy.json" with { type: "json" };
 const vectors = JSON.parse(readFileSync(new URL("./native-vectors.json", import.meta.url), "utf8"));
 const compiled = ts.transpileModule(readFileSync(new URL("../src/main.tsx", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
 const base = { exists: true, locked: false, selected: "one", network: "mainnet", wallets: [{ id: "one", name: "A", address: vectors.addresses[0], primaryAddress: vectors.addresses[0], index: 0 }], pending: [] };
@@ -33,7 +34,7 @@ function mount(view: any = base, raw: any[] = [], android?: { deviceSecret: (tit
     chrome: { i18n: { getUILanguage: () => "zh-CN" }, runtime: { getManifest: () => ({ version: "0.2.0" }), async sendMessage(message: any) {
       calls.push(message); return { ok: true, data: message.command === "fee" ? { fee: 50000, estimated: true } : message.donation ? { id: "review", to: donation.DONATION_ADDRESS, donation: true, network: "mainnet", amount: "500000000", fee: "12300", change: "1000" } : { id: "send", to: vectors.cases[0].to, network: "mainnet", amount: "123456789000", fee: "600000", change: "0" } };
     } } },
-    require: (name: string) => name === "react" ? React : name === "react-dom/client" ? { createRoot: () => ({ render: (element: Element) => { root = element; } }) } : android && name.includes("android/native.ts") ? { ...android, walletCopy: () => ({ confirmNote: "Fingerprint" }), secureScreen() {}, forgetDeviceSecret: async () => {}, openSecuritySettings() {}, publishWalletWidget() {}, BridgeError: class extends Error {} } : android && name.includes("android-host.ts") ? { pearlHost: () => undefined } : name.includes("SendReceipt.tsx") ? { SendReceipt: "SendReceipt" } : name.includes("receipt.ts") ? receipt : name.includes("wallet.ts") ? wallet : name.includes("chain.ts") ? { origin: () => "https://unused.invalid" } : name.includes("i18n/") ? i18n : name.includes("market.ts") ? market : name.includes("feature-copy.ts") ? featureCopy : name.includes("contacts.ts") ? contacts : name.includes("donation.ts") ? donation : name.includes("web-links.ts") ? webLinks : name.includes("security-overview.ts") ? securityOverview : name.includes("account-copy.ts") ? accountCopy : name.includes("transactions.ts") ? transactions : {},
+    require: (name: string) => name === "react" ? React : name === "react-dom/client" ? { createRoot: () => ({ render: (element: Element) => { root = element; } }) } : android && name.includes("android/native.ts") ? { ...android, walletCopy: () => ({ ...androidCopy["zh-Hans"], confirmNote: "Fingerprint" }), secureScreen() {}, forgetDeviceSecret: async () => {}, openSecuritySettings() {}, publishWalletWidget() {}, BridgeError: class extends Error {} } : android && name.includes("android-host.ts") ? { pearlHost: () => undefined } : name.includes("UpdateBanner.tsx") ? { useAndroidUpdate: () => ({ latest: undefined, dismiss() {} }), UpdateBanner: "UpdateBanner" } : name.includes("SendReceipt.tsx") ? { SendReceipt: "SendReceipt" } : name.includes("receipt.ts") ? receipt : name.includes("wallet.ts") ? wallet : name.includes("chain.ts") ? { origin: () => "https://unused.invalid" } : name.includes("i18n/") ? i18n : name.includes("market.ts") ? market : name.includes("feature-copy.ts") ? featureCopy : name.includes("contacts.ts") ? contacts : name.includes("donation.ts") ? donation : name.includes("web-links.ts") ? webLinks : name.includes("security-overview.ts") ? securityOverview : name.includes("account-copy.ts") ? accountCopy : name.includes("transactions.ts") ? transactions : {},
   });
   return { render: () => { cursor = 0; return root.type(); }, calls };
 }
@@ -86,6 +87,13 @@ test("testnet/developer wallets hide donation; testnet hides invalid web deep li
 });
 const historyView = { ...base, snapshot: { balance: "100000000", pending: "0", time: 1, history: [{ txid: "11".repeat(32), delta: "100000000", address: vectors.cases[0].to, sent: false, time: 1, confirmations: 2 }, { txid: "22".repeat(32), delta: "-1000", address: "", sent: true, time: 1, confirmations: 1 }] } };
 const dialogTitle = (tree: Element) => content(all(all(tree, (e) => e.props?.className === "dialog-title")[0], (e) => e.type === "h2")[0]);
+test("Android: recent transaction rows open the same transaction detail as the full history", () => {
+  const app = mount(historyView, [], { deviceSecret: async () => "unused-test-secret" });
+  const rows = all(app.render(), (e) => e.type === "button" && e.props?.className === "recent-row");
+  assert.equal(rows.length, 2);
+  rows[0].props.onClick();
+  assert.equal(dialogTitle(app.render()), "交易详情");
+});
 test("history renders contact names and copy controls separately from opening the transaction details", () => {
   const app = mount(historyView, [{ id: "contact", name: "Saved name", address: vectors.cases[0].to, note: "" }]);
   button(app.render(), "交易记录").props.onClick();

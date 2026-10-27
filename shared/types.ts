@@ -14,7 +14,8 @@ export type Monitor = Item & {
 };
 export type Wallet = Item & { addr: string; label: string };
 export type Rule = Item & {
-  kind: "above" | "below" | "move";
+  /// reach = 到达目标价: the price gets to `value` from either side.
+  kind: "above" | "below" | "reach" | "move";
   value: number;
   window: number;
   enabled: boolean;
@@ -144,6 +145,8 @@ export type PoolPayout = {
   /** grossPerPH is today's theory × the pool's 7-day luck, not one day of blocks. */
   weekly?: boolean;
   solo: boolean;
+  /** A merge-mined coin paid besides PRL (F2Pool's NOCK), worth about minPercent–maxPercent of the PRL income. A label only. */
+  mergeBonus?: { coin: string; minPercent: number; maxPercent: number } | null;
 };
 export type Overview = {
   ok: boolean;
@@ -234,6 +237,8 @@ export type Availability = {
   vapid_key: string | null;
   // Android: the server can deliver through Firebase Cloud Messaging (BRIDGE.md in the prl-hub-android repository).
   fcm?: boolean;
+  // Android Play build: the server can verify and acknowledge Google Play purchases (prl-hub alerts play.js).
+  play?: boolean;
   auth?: { enabled: boolean; site_key: string | null };
 };
 export type Me = Availability & {

@@ -273,6 +273,8 @@
   "同步余额…": "Đang đồng bộ số dư…",
   "同步中…": "Đang đồng bộ…",
   "NOCK 记录": "Lịch sử NOCK",
+  "记录": "Lịch sử",
+  "最近交易": "Giao dịch gần đây",
   "暂无交易记录": "Chưa có giao dịch",
   "你的收发记录会显示在这里": "Lịch sử nhận/gửi của bạn sẽ hiển thị ở đây",
   "用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。": "Dùng chung cụm từ khôi phục: nhập nó vào ví chính thức của Nockchain hoặc Iris, bạn sẽ thấy cùng địa chỉ NOCK này.",
@@ -336,5 +338,10 @@
   "无法连接 Nockchain 节点": "Không kết nối được nút Nockchain",
   "记录由本机保存：收到的每一笔从本机第一次看到它时算起，换设备或重装后只能看到当前持有的部分。": "Lịch sử được lưu trên thiết bị này: mỗi khoản nhận được ghi lại khi thiết bị thấy nó lần đầu. Trên thiết bị khác hoặc sau khi cài lại, chỉ thấy phần bạn đang giữ.",
   "rpc.nockbox.org 现在连不上。可以允许插件在它连不上时改用 Nockchain 官方钱包默认使用的节点（216.158.95.10）；这个节点走明文 HTTP，网络路径上的其他人能看到这些请求。浏览器会请你确认。": "Hiện không kết nối được rpc.nockbox.org. Bạn có thể cho phép tiện ích dùng nút mà ví Nockchain chính thức dùng mặc định (216.158.95.10) mỗi khi điều này xảy ra. Nút này dùng HTTP không mã hóa, nên người khác trên đường truyền có thể thấy các yêu cầu đó. Trình duyệt sẽ hỏi bạn xác nhận.",
-  "允许使用备用节点": "Cho phép nút dự phòng"
+  "允许使用备用节点": "Cho phép nút dự phòng",
+  "可用": "Khả dụng",
+  "锁定 · 挖矿收入约 {count} 小时后可用": "Đang khóa · phần thưởng khối, dùng được sau ~{count} giờ",
+  "记录从区块浏览器 nockscan.com 读取，换设备或重装后也能看到。": "Lịch sử được đọc từ trình khám phá khối nockscan.com, nên vẫn xem được khi đổi thiết bị hoặc cài lại.",
+  "正在检查历史找零…": "Đang quét tiền thừa cũ…",
+  "历史找零已检查完毕，余额已更新。": "Đã quét xong tiền thừa cũ, số dư đã được cập nhật."
 }

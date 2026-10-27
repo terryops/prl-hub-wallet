@@ -18,7 +18,7 @@ test("security overview: no content scripts, no web-page route, three sites only
   // Beyond the three sites: the extension's own files (the NOCK core's .wasm), the public Nockchain node and
   // CoinGecko's NOCK price, all without a site permission (they send CORS headers), and the second Nockchain
   // node, reachable only once the person grants its optional permission (extNock, extPages).
-  assert.ok(csp.includes(`connect-src 'self' ${hosts.join(" ")} https://rpc.nockbox.org http://216.158.95.10:5556 https://api.coingecko.com`));
+  assert.ok(csp.includes(`connect-src 'self' ${hosts.join(" ")} https://rpc.nockbox.org http://216.158.95.10:5556 https://api.coingecko.com https://nockscan.com`));
   assert.deepEqual((manifest as { optional_host_permissions?: string[] }).optional_host_permissions, ["http://216.158.95.10/*"]);
   // 'wasm-unsafe-eval' lets the packaged NOCK core (WebAssembly) run; no other code can be evaluated.
   assert.ok(csp.includes("script-src 'self' 'wasm-unsafe-eval'"));

@@ -273,6 +273,8 @@
   "同步余额…": "Menyinkron saldo…",
   "同步中…": "Menyinkron…",
   "NOCK 记录": "Riwayat NOCK",
+  "记录": "Riwayat",
+  "最近交易": "Transaksi Terbaru",
   "暂无交易记录": "Belum ada transaksi",
   "你的收发记录会显示在这里": "Riwayat kirim dan terima Anda muncul di sini",
   "用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。": "Memakai frasa pemulihan yang sama: impor ke dompet resmi Nockchain atau Iris dan Anda akan melihat alamat NOCK yang sama.",
@@ -336,5 +338,10 @@
   "无法连接 Nockchain 节点": "Tidak dapat terhubung ke node Nockchain",
   "记录由本机保存：收到的每一笔从本机第一次看到它时算起，换设备或重装后只能看到当前持有的部分。": "Riwayat disimpan di perangkat ini: setiap penerimaan dicatat saat perangkat ini pertama kali melihatnya. Di perangkat lain atau setelah instal ulang, hanya yang Anda pegang sekarang yang tampil.",
   "rpc.nockbox.org 现在连不上。可以允许插件在它连不上时改用 Nockchain 官方钱包默认使用的节点（216.158.95.10）；这个节点走明文 HTTP，网络路径上的其他人能看到这些请求。浏览器会请你确认。": "rpc.nockbox.org sedang tidak dapat dihubungi. Anda dapat mengizinkan ekstensi memakai node bawaan dompet resmi Nockchain (216.158.95.10) setiap kali hal ini terjadi. Node itu memakai HTTP tanpa enkripsi, sehingga pihak lain di jalur jaringan dapat melihat permintaan tersebut. Browser akan meminta konfirmasi Anda.",
-  "允许使用备用节点": "Izinkan node cadangan"
+  "允许使用备用节点": "Izinkan node cadangan",
+  "可用": "Tersedia",
+  "锁定 · 挖矿收入约 {count} 小时后可用": "Terkunci · hadiah blok, bisa dipakai setelah ~{count} jam",
+  "记录从区块浏览器 nockscan.com 读取，换设备或重装后也能看到。": "Riwayat dibaca dari penjelajah blok nockscan.com, jadi tetap terlihat di perangkat baru atau setelah instal ulang.",
+  "正在检查历史找零…": "Memindai kembalian lama…",
+  "历史找零已检查完毕，余额已更新。": "Pemindaian kembalian lama selesai. Saldo diperbarui."
 }

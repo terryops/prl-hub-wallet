@@ -1,4 +1,4 @@
-# Chrome 商店注册与提交清单（Pearl Hub Wallet 0.1.2 起，0.1.7 的改动见第八节）
+# Chrome 商店注册与提交清单（Pearl Hub Wallet 0.1.2 起，0.1.7 的改动见第八节，0.1.8 见第九节）
 
 按商店后台的顺序逐项填写。英文文案取自 `store/en.json`，其他语言取自对应的 `store/<语言>.json`。
 
@@ -143,3 +143,14 @@ node scripts/store-release.mjs submit --staged   # 审核通过后先暂存，�
 **已完成（2026-10-21）**：`store:upload` 传了 0.1.7 草稿；后台 16 种语言的详细说明、单一用途、主机权限理由逐项填入并 Save draft，重新加载后逐字核对一致；审核说明在单独的 Test instructions 页（`…/testcredentials`，点 Edit 再点 Save changes，立即生效，不属于草稿）；数据使用勾选、远程代码「No」、隐私政策网址未动。然后 `npm run store:publish` 提交审核，状态 PENDING_REVIEW 0.1.7，通过后自动发布。
 
 做法：另开一个 Chrome（`--user-data-dir=~/.cache/cws-devconsole-profile --remote-debugging-port=9335`，不是日常的 Chrome 资料），发布者账号 breathlex@gmail.com 在里面手动登录一次，之后用 Playwright `connectOverCDP` 操作后台页面（本机有代理，连 127.0.0.1 时要设 `NO_PROXY=127.0.0.1`）。语言切换是「Current editing language」下拉框，每种语言改完先 Save draft 再换下一种。
+
+## 九、0.1.8：提交前要在后台改的内容
+
+0.1.8 的 NOCK 记录改从区块浏览器 `nockscan.com` 读取，请求里带 NOCK 地址（只在用过 NOCK 之后）。nockscan.com 对任何来源返回 `access-control-allow-origin: *`，所以不需要站点权限，清单的权限没有变化，只在 CSP 的 `connect-src` 里加了它。
+
+- **Store listing**：16 种语言的详细说明换成 `store/<语言>.json` 的 `detailedDescription`。和 0.1.7 相比只多一句：在「NOCK 价格来自 CoinGecko」前面说明记录从 nockscan.com 读取、会收到 NOCK 地址。
+- **Privacy practices**：单一用途、权限理由、远程代码都不变。数据使用的勾选不变：NOCK 地址属于已经勾选的「财务和付款信息」。`dataUseDisclosure` 同样加了一句，仅作记录。
+- **隐私政策**：https://pearlhub.net/privacy 插件的 NOCK 段落要先加上 nockscan.com（prl-hub-web 的 wallet-018 发布）。插件自带的 `public/privacy.html` 已经加上。
+- **Test instructions**：不变。
+
+顺序同 0.1.7：`npm run store:upload` 传草稿 → 后台改详细说明并 Save draft → `npm run store:publish` 提交审核。

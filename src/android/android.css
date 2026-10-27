@@ -39,3 +39,78 @@
 .android-confirm { display: flex; gap: 8px; align-items: center; margin: 4px 0 12px; color: var(--muted); font-size: var(--font-13); line-height: 1.5; }
 .android-confirm .icon { flex: none; width: 18px; height: 18px; color: var(--blue-text); }
 .android-lock-help { display: grid; gap: 8px; }
+
+/* 恢复钱包: the word count and Paste, as in the iOS app's import screen. */
+.phrase-tools { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: -4px; }
+.phrase-tools button { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 4px 10px; }
+.phrase-tools button .icon { width: 14px; height: 14px; }
+.phrase-count-off { color: var(--warn); }
+
+/* The iOS wallet home (Dashboard.swift): the sync warning, the last three transfers, and the one-line
+   links to 价格提醒 and 桌面小组件. */
+.sync-banner { display: flex; align-items: flex-start; gap: 6px; margin: 10px 2px 0; color: var(--warn); font-size: var(--font-12); line-height: 1.5; }
+.sync-banner .icon { flex: none; width: 14px; height: 14px; margin-top: 2px; }
+.recent-card { margin: 16px 0 12px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
+.recent-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; color: var(--muted); font-size: var(--font-12); font-weight: 600; }
+.recent-head .text-button { min-height: 24px; padding: 0 4px; border: 0; background: transparent; color: var(--blue-text); font-size: var(--font-12); font-weight: 500; }
+.recent-row { display: flex; align-items: center; gap: 8px; min-height: 28px; font-size: var(--font-12); }
+.recent-row strong { font-variant-numeric: tabular-nums; font-weight: 650; }
+.recent-row strong.in { color: var(--green); }
+.recent-row small { margin-left: auto; color: var(--muted); white-space: nowrap; }
+.recent-dir { display: grid; flex: none; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: color-mix(in srgb, #e08a2b 15%, transparent); color: #d07a1b; }
+.recent-dir.in { background: color-mix(in srgb, var(--green) 15%, transparent); color: var(--green); }
+.recent-dir .icon { width: 11px; height: 11px; }
+.recent-conf { padding: 1px 6px; border-radius: 999px; background: var(--soft); color: var(--muted); font-size: 11px; white-space: nowrap; }
+.recent-conf.pending { background: color-mix(in srgb, #e08a2b 14%, transparent); color: #c06d10; }
+.recent-empty { margin: 0; padding: 18px 0; color: var(--muted); font-size: var(--font-12); text-align: center; }
+.skeleton-row { margin: 4px 0; border-radius: 6px; background: var(--soft); min-height: 20px; }
+.inline-links { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 0 0 16px; }
+.inline-link { display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%; min-width: 0; min-height: 32px; padding: 4px 6px; border: 0; background: transparent; color: var(--muted); font-size: var(--font-12); font-weight: 400; }
+.inline-link:hover { background: transparent; }
+.inline-link .icon { flex: none; width: 14px; height: 14px; color: var(--blue-text); }
+.inline-link-title { flex: none; color: var(--blue-text); }
+.inline-link-dot { flex: none; opacity: .5; }
+.inline-link-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.inline-link .inline-link-chevron { width: 11px; height: 11px; color: var(--muted); transform: rotate(-90deg); }
+/* The iOS send screen's inline checks. */
+.field-error { display: block; margin: -6px 0 10px; color: var(--red); font-size: var(--font-12); line-height: 1.45; }
+.field-note { display: block; margin: -6px 0 10px; color: var(--muted); font-size: var(--font-12); }
+.donation-source { display: block; margin-top: 10px; font-size: var(--font-12); }
+.balance.cached { opacity: .65; }
+/* iOS VerifyStep: pick each of three words. */
+.quiz.quiz-choices { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+.quiz-choices fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.quiz-choices legend { margin-bottom: 6px; color: var(--muted); font-size: var(--font-12); }
+.quiz-choices fieldset > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.quiz-choices button { min-height: 38px; font-family: ui-monospace, monospace; }
+.quiz-choices button.selected { border-color: var(--blue); background: var(--selected); color: var(--blue-text); }
+/* 管理钱包 row menu. */
+.wallet-row { display: flex; align-items: center; gap: 4px; }
+.wallet-row .wallet-choice { flex: 1; min-width: 0; }
+.wallet-row-menu { position: relative; }
+.wallet-row-menu summary { display: grid; place-items: center; width: 36px; height: 36px; cursor: pointer; list-style: none; }
+.wallet-row-menu summary::-webkit-details-marker { display: none; }
+.wallet-row-menu[open] > button { position: absolute; right: 0; z-index: 2; min-width: 120px; }
+.wallet-row-menu[open] > button:first-of-type { top: 38px; }
+.wallet-row-menu[open] > button:last-of-type { top: 82px; }
+/* The open menu hangs below its row: give the list room so it stays inside the sheet, above the
+   tab bar, instead of needing a scroll to reach 删除. */
+.wallet-list:has(.wallet-row-menu[open]) { padding-bottom: 64px; }
+/* 找回搁浅的找零. */
+.recover { display: grid; gap: 10px; }
+.recover p { margin: 0; }
+.recover-list { display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--soft); }
+.recover-list div { display: flex; justify-content: space-between; gap: 8px; font-size: var(--font-12); }
+.recover-total { font-weight: 650; }
+.recover-none { padding: 16px 0; text-align: center; }
+.recover-dest { display: grid; gap: 6px; margin: 0; padding: 0; border: 0; }
+.recover-dest legend { margin-bottom: 4px; color: var(--muted); font-size: var(--font-12); }
+.recover-dest label { display: flex; align-items: center; gap: 8px; }
+.donation-badge { display: block; width: fit-content; margin: 0 auto 12px; padding: 5px 10px; border-radius: 999px; background: var(--soft); color: var(--blue-text); font-size: var(--font-12); font-weight: 600; }
+.donation-explanation { color: var(--muted); font-size: var(--font-13); line-height: 1.6; text-align: center; }
+button.recent-row { width: 100%; border: 0; border-radius: 0; background: transparent; text-align: start; }
+.android-update { display: flex; align-items: center; gap: 4px; margin-bottom: 12px; padding: 8px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.android-update-open { flex: 1; min-width: 0; padding: 4px; border: 0; background: transparent; gap: 8px; text-align: start; }
+.android-update-open > .icon { width: 22px; height: 22px; color: var(--blue-text); flex-shrink: 0; }
+.android-update-open strong { flex: 1; font-size: var(--font-13); }
+.android-update-open > span { padding: 5px 12px; border-radius: 999px; background: var(--blue); color: white; font-size: var(--font-12); }

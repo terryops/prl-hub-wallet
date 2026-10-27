@@ -32,7 +32,7 @@ export async function secondNodeAllowed() {
 /// The nodes this build can reach now, in order of preference.
 export const availableNodes = async (): Promise<string[]> => await secondNodeAllowed() ? [NOCKBOX, CLI_NODE] : [NOCKBOX];
 /// Block explorer for "view in explorer" links.
-export const explorerTx = (txId: string) => `https://nockscan.net/tx/${encodeURIComponent(txId)}`;
+export const explorerTx = (txId: string) => `https://nockscan.com/tx/${encodeURIComponent(txId)}`;
 
 const WALLET = "nockchain.public.v2.NockchainService/", BLOCKS = "nockchain.public.v2.NockchainBlockService/";
 

@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { setModuleSource, moduleURL, NockFailure, deriveAccount } from "../src/nock/core.ts";
 import { NICKS_PER_NOCK } from "../src/nock/units.ts";
 import { NockClient, NockRPCError, NOCKBOX, CLI_NODE, type NockNote, type TxDetails } from "../src/nock/client.ts";
+import { NockScan, parseScan, type ScanEntry, type ScanPage } from "../src/nock/scan.ts";
 
 setModuleSource(() => readFile(moduleURL()));
 const area = () => {
@@ -53,7 +54,101 @@ const ok = async () => {};
 beforeEach(async () => {
   permissions.granted = false;
   node = new FakeNode(); service.setClient(node);
+  service.setScanClient(new NockScan(async () => new Response(null, { status: 404 })));
   await local.clear(); await session.clear();
+});
+
+test("nockscan uses a simple GET, parses mined/sent rows and treats 404 as empty", async () => {
+  const scan = new NockScan(async (input, init) => {
+    const url = new URL(String(input));
+    assert.equal(url.origin + url.pathname, "https://nockscan.com/api/v1/address");
+    assert.deepEqual(Object.fromEntries(url.searchParams), { address: "address &", limit: "200", offset: "25" });
+    assert.deepEqual(init?.headers, { Accept: "application/json" });
+    assert.equal(init?.credentials, "omit");
+    return new Response(null, { status: 404 });
+  });
+  assert.deepEqual(await scan.page("address &", 200, 25), { entries: [], hasMore: false, count: 0 });
+  const page = parseScan({ transactions: [
+    { txId: "coinbase-a", type: "received", isCoinbase: true, blockHeight: "10", timestamp: 100, amount: "9007199254740993" },
+    { txId: "send", type: "sent", blockHeight: 11, timestamp: "110", amount: "15", fee: 2, counterparties: [RECIPIENT] },
+    { txId: "bad", type: "received", blockHeight: -1, timestamp: 100, amount: 1 },
+  ], pagination: { hasMore: true } });
+  assert.equal(page.entries[0].kind, "mined"); assert.equal(page.entries[0].amount, "9007199254740993");
+  assert.equal(page.entries[1].time, 110000); assert.equal(page.entries[1].fee, "2");
+  assert.equal(page.count, 3); assert.equal(page.hasMore, true);
+  assert.throws(() => parseScan({}), /malformed/);
+  await assert.rejects(new NockScan(async () => new Response(null, { status: 503 })).page("a", 25, 0), /503/);
+});
+
+const scanEntry = (txId: string, kind: ScanEntry["kind"], amount: string, height = 100): ScanEntry => ({ txId, kind, amount, fee: "2", height, time: 1000, counterparties: [RECIPIENT] });
+const noteRow = (id: string, amount: string, kind: "received" | "mined" = "received", height = 100): import("../src/nock/service.ts").NockTx => ({ id: `note:${id}`, kind, amount, height, time: 0, timeExact: false, status: "confirmed" });
+
+test("nockscan merge: one note or the same-kind sum becomes its transaction, mismatches stay local", () => {
+  const rows = [noteRow("a", "3"), noteRow("b", "4"), noteRow("reward", "10", "mined")];
+  const merged = service.mergeScan(rows, [scanEntry("incoming", "received", "7"), scanEntry("coinbase-1", "mined", "10")]);
+  assert.deepEqual(merged.map((r) => r.id), ["incoming", "coinbase-1"]);
+  assert.equal(merged[0].txId, "incoming"); assert.equal(merged[1].txId, undefined);
+  assert.equal(merged[0].timeExact, true);
+  assert.deepEqual(service.mergeScan(rows, [scanEntry("mismatch", "received", "8")]), rows);
+  assert.deepEqual(service.mergeScan(rows, [scanEntry("one", "received", "3")]).map((r) => r.id), ["note:b", "note:reward", "one"]);
+  assert.equal(rows.length, 3, "merge does not mutate the saved rows");
+});
+
+test("nockscan merge: sends keep recipient amounts; external change isn't income; pending and failed stay", () => {
+  const own = { ...noteRow("unused", "40"), id: "own", kind: "sent" as const, txId: "own", counterparty: "ours" };
+  const pending = { ...own, id: "pending", status: "pending" as const };
+  const failed = { ...own, id: "failed", status: "failed" as const };
+  const entries = [scanEntry("own", "sent", "42"), scanEntry("external", "sent", "12", 101), scanEntry("pending", "sent", "42"), scanEntry("failed", "sent", "42")];
+  const merged = service.mergeScan([own, pending, failed, noteRow("change", "8", "received", 101)], entries);
+  assert.equal(merged.find((r) => r.id === "own")?.amount, "40");
+  assert.equal(merged.find((r) => r.id === "own")?.fee, "2");
+  assert.equal(merged.find((r) => r.id === "own")?.counterparty, "ours");
+  assert.equal(merged.find((r) => r.id === "external")?.amount, "10");
+  assert.ok(!merged.some((r) => r.id === "note:change"));
+  assert.deepEqual(merged.find((r) => r.id === "pending"), pending);
+  assert.deepEqual(merged.find((r) => r.id === "failed"), failed);
+  assert.equal(service.mergeScan(merged, [...entries, entries[0]]).length, merged.length);
+  assert.ok(service.scanCovers({ ...ownNote(), originPage: 101, kind: "simple" }, merged));
+});
+
+function ownNote() { return own[0]; }
+
+test("nockscan history: full first/daily, incremental after five minutes, force and new notes immediately", async (t) => {
+  let now = 1_800_000_000_000;
+  t.mock.method(Date, "now", () => now);
+  const calls: { limit: number; offset: number }[] = [];
+  class Scan extends NockScan {
+    override async page(_address: string, limit: number, offset: number): Promise<ScanPage> {
+      calls.push({ limit, offset });
+      return { entries: [scanEntry("historic", "received", "7", 1)], hasMore: offset === 0, count: 1 };
+    }
+  }
+  service.setScanClient(new Scan());
+  await service.nockRefresh(W, ABANDON, service.STALE_MS, true);
+  assert.deepEqual(calls, [{ limit: 200, offset: 0 }, { limit: 200, offset: 1 }]);
+  now += 60000; await service.nockRefresh(W, ABANDON, service.STALE_MS);
+  assert.equal(calls.length, 2);
+  now += service.SCAN_EVERY_MS; await service.nockRefresh(W, ABANDON, service.STALE_MS);
+  assert.deepEqual(calls.at(-1), { limit: 25, offset: 0 });
+  now += 60000; await service.nockRefresh(W, ABANDON);
+  assert.equal(calls.length, 4, "manual refresh forces an incremental read");
+  node.notesNow = [...own, { ...own[0], nameFirst: "new-note", originPage: 169001 }];
+  now += 60000; await service.nockRefresh(W, ABANDON, service.STALE_MS);
+  assert.equal(calls.length, 5, "new note forces history before the five-minute interval");
+  now += service.FULL_SCAN_EVERY_MS; await service.nockRefresh(W, ABANDON, service.STALE_MS);
+  assert.equal(calls.at(-1)?.limit, 200);
+});
+
+test("opening the NOCK page reads history even for an empty account; failures preserve local history", async () => {
+  node.notesNow = [];
+  let calls = 0;
+  service.setScanClient(new NockScan(async () => { calls++; throw new Error("offline"); }));
+  await service.nockRefresh(W, ABANDON, service.STALE_MS);
+  assert.equal(calls, 0);
+  const v = await service.nockRefresh(W, ABANDON, service.STALE_MS, true);
+  assert.equal(calls, 1); assert.equal(v.backendReady, true); assert.equal(v.syncError, undefined);
+  await service.nockRefresh(W, ABANDON);
+  assert.equal(calls, 2, "failed history reads retry without breaking balance reads");
 });
 
 test("a first read: balance with locked rewards apart, a row per note, the strip shows", async () => {
@@ -71,8 +166,12 @@ test("a first read: balance with locked rewards apart, a row per note, the strip
   assert.equal((await service.nockRefresh(W, ABANDON)).history.length, 4);
 });
 
-test("send: signed before the password, held before broadcast, settled when mined, change isn't income", async () => {
+test("send: signed before the password, held before broadcast, settled when mined, change isn't income", async (t) => {
+  let now = Date.now(), scans = 0;
+  t.mock.method(Date, "now", () => now);
+  service.setScanClient(new NockScan(async () => { scans++; return new Response(null, { status: 404 }); }));
   await service.nockRefresh(W, ABANDON);
+  assert.equal(scans, 1);
   const r = await service.nockPrepare(W, ABANDON, RECIPIENT, "40", false);
   assert.ok("prepared" in r && r.prepared, JSON.stringify(r));
   const p = r.prepared!;
@@ -100,7 +199,9 @@ test("send: signed before the password, held before broadcast, settled when mine
   const change: NockNote = { ...own[0], nameFirst: first, nameLast: last, assets: (10n * NOCK - BigInt(p.fee)).toString(), originPage: 169001 };
   node.notesNow = [...own.filter((n) => n !== spent), change]; node.tip = 169002;
   node.details.set(p.id, { pending: false, height: 169001, time: 1_790_000_500_000, fee: p.fee });
-  v = await service.nockRefresh(W, ABANDON);
+  now += 60000;
+  v = await service.nockRefresh(W, ABANDON, service.STALE_MS);
+  assert.equal(scans, 2, "a settled send immediately reads nockscan even before five minutes, with no new income note");
   assert.equal(v.hasPendingSend, false);
   const row = v.history.find((t) => t.id === p.id)!;
   assert.equal(row.status, "confirmed"); assert.equal(row.confirmations, 2); assert.equal(row.time, 1_790_000_500_000);
@@ -200,4 +301,17 @@ test("the extension's second node: used once its permission is granted, offered 
   assert.equal((await service.nockStatus(W)).offerSecondNode, true);
   node.notes = FakeNode.prototype.notes.bind(node);
   assert.equal((await service.nockRefresh(W, ABANDON)).offerSecondNode, false);
+});
+
+test("nockscan: without a stand-in, the global fetch is looked up at each call (a stored fetch called as a method throws in browsers)", async () => {
+  const original = globalThis.fetch, seen: string[] = [];
+  const scan = new NockScan();
+  globalThis.fetch = (async function (this: unknown, url: string | URL | Request) {
+    assert.ok(this === undefined || this === globalThis, "fetch called on another object");
+    seen.push(String(url));
+    return new Response("{}", { status: 404 });
+  }) as typeof fetch;
+  try { assert.deepEqual(await scan.page("addr", 25, 0), { entries: [], hasMore: false, count: 0 }); }
+  finally { globalThis.fetch = original; }
+  assert.deepEqual(seen, ["https://nockscan.com/api/v1/address?address=addr&limit=25&offset=0"]);
 });

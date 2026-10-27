@@ -1,4 +1,5 @@
 import { defineConfig } from "vite";
+import { touchHover } from "./scripts/touch-hover.mjs";
 // The wallet inside the Android app: served at https://pearlhub.net/wallet/ from the APK.
 // web/scripts/build-android.mjs in prl-hub-web copies dist-android/ into the app bundle.
 export default defineConfig({
@@ -6,6 +7,8 @@ export default defineConfig({
   publicDir: false,
   resolve: { dedupe: ["react", "react-dom"] },
   define: { __PEARL_ANDROID__: "true" },
+  // Touch screens: hover styles show only while pressed (scripts/touch-hover.mjs).
+  css: { postcss: { plugins: [touchHover()] } },
   build: {
     outDir: "dist-android",
     emptyOutDir: true,

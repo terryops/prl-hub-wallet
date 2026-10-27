@@ -2,8 +2,8 @@
 // NockWalletStore.swift. The account comes from the same seed as the PRL wallet (passed in while it is
 // unlocked); chain state from the public nodes (client.ts).
 //
-// The node keeps no history per address, so the wallet keeps its own: a row for each note it sees
-// arrive, plus the sends it broadcast. That state (address, last balance, history, sends in flight) is
+// Nodes keep only current notes. nockscan.com fills the full address history; local note observations
+// and sends are reconciled with those transactions. That state (address, last balance, history, sends in flight) is
 // kept per wallet in chrome.storage.local, unencrypted like the address book, and goes when the wallet
 // is removed. It holds no key: the recovery phrase stays in the encrypted vault and signing happens
 // here, from the phrase, each time.
@@ -12,6 +12,7 @@ import { NockClient, noteId, isMiningReward, isRefusal, isAlreadyKnown, isTransi
 import { nockCall, deriveAccount, addressProblem, NockFailure, type NockAccount } from "./core.ts";
 import { parseNock, plainNock } from "./units.ts";
 import { NockError, errorText, type NockText } from "./errors.ts";
+import { NockScan, type ScanEntry } from "./scan.ts";
 
 export type NockTx = {
   /// The txid for a send; "note:<name>" for a note that arrived.
@@ -51,6 +52,7 @@ type State = {
   syncedAt?: number;
   /// The receive page showed this wallet's NOCK address (the person went to get it).
   addressShown?: boolean;
+  fullScanAt?: number;
 };
 /// A signed send waiting for the person's confirmation: nothing has left the device yet.
 type Prepared = { walletId: string; txId: string; recipient: string; amount: string; fee: string; change: string; returning: string; sweep: boolean; body: string; inputs: string[]; changeNotes: string[]; createdAt: number };
@@ -82,6 +84,7 @@ export type PreparedView = { id: string; recipient: string; amount: string; fee:
 /// Seconds between blocks since Aletheia: only to estimate a time until the real one loads.
 export const BLOCK_MS = 150000;
 export const PREPARED_MS = 600000, DROP_AFTER_MS = 30 * 60000, HISTORY_LIMIT = 1000, SEEN_MS = 3 * 86400000, STALE_MS = 30000;
+export const SCAN_EVERY_MS = 5 * 60000, FULL_SCAN_EVERY_MS = 24 * 3600000;
 const REVIEW = "nock.review";
 export const stateKey = (walletId: string) => `nock.state.${walletId}`;
 const zero: NockBalance = { total: "0", available: "0", locked: "0" };
@@ -89,7 +92,7 @@ const zero: NockBalance = { total: "0", available: "0", locked: "0" };
 /// What lives only as long as the background does (the service worker may stop any time).
 type Runtime = { generation: number; account?: NockAccount; notes?: NockNote[]; tip?: number; backendReady: boolean; syncError?: NockText; lastLoadAt?: number; loading?: Promise<void>; blockTimes: Map<number, number>;
   /// The last read failed because no node answered (not a node's own verdict).
-  nodeDown?: boolean };
+  nodeDown?: boolean; scanAt?: number; historyRequested?: boolean; forceScanNext?: boolean };
 const runtimes = new Map<string, Runtime>();
 let generations = 0;
 const runtime = (walletId: string) => {
@@ -99,15 +102,18 @@ const runtime = (walletId: string) => {
 };
 
 let client = new NockClient();
+let scan = new NockScan();
 /// Tests: the nodes and transport.
 export function setClient(next: NockClient) { client = next; runtimes.clear(); }
+export function setScanClient(next: NockScan) { scan = next; }
 
 async function readState(walletId: string): Promise<State> {
   const raw = (await chrome.storage.local.get(stateKey(walletId)))[stateKey(walletId)] as Partial<State> | undefined;
   // Lenient: a field added later must not make an older saved state unreadable.
   return { history: Array.isArray(raw?.history) ? raw.history : [], seen: raw?.seen && typeof raw.seen === "object" ? raw.seen : {}, pending: Array.isArray(raw?.pending) ? raw.pending : [],
     address: typeof raw?.address === "string" ? raw.address : undefined, balance: raw?.balance, tip: typeof raw?.tip === "number" ? raw.tip : undefined,
-    syncedAt: typeof raw?.syncedAt === "number" ? raw.syncedAt : undefined, addressShown: raw?.addressShown === true };
+    syncedAt: typeof raw?.syncedAt === "number" ? raw.syncedAt : undefined, addressShown: raw?.addressShown === true,
+    fullScanAt: typeof raw?.fullScanAt === "number" ? raw.fullScanAt : undefined };
 }
 /// Written only while the runtime that read it is still the wallet's: a wallet removed meanwhile stays removed.
 async function writeState(walletId: string, generation: number, state: State) {
@@ -172,8 +178,11 @@ async function account(walletId: string, mnemonic: string) {
 
 /// Reads the chain for the wallet: balance, arrivals, and how its sends fared. Single-flight: a call while
 /// one runs waits for that one. `stale`: skip the read when the last one is younger than that (ms).
-export async function nockRefresh(walletId: string, mnemonic: string, stale = 0): Promise<NockView> {
+export async function nockRefresh(walletId: string, mnemonic: string, stale = 0, historyRequested = false): Promise<NockView> {
   const r = runtime(walletId);
+  // A page can request history even when this install has never held NOCK.
+  if (historyRequested && !r.historyRequested) { r.historyRequested = true; if (r.scanAt === undefined) r.lastLoadAt = undefined; }
+  if (!stale) r.forceScanNext = true;
   const a = await account(walletId, mnemonic);
   await serial(async () => {
     const s = await readState(walletId);
@@ -199,13 +208,20 @@ async function load(walletId: string, r: Runtime, a: NockAccount, retried = fals
     const tip = Math.max(plain.height, mined.height);
     const notes = [...byId.values()].sort((x, y) => y.originPage - x.originPage);
     const s = await readState(walletId);
+    const openBefore = s.pending.filter((p) => p.status === "pending").length;
     await reconcileSends(s, notes, current);
     if (!current()) return;
     r.notes = notes; r.tip = tip; r.backendReady = true; r.syncError = undefined; r.nodeDown = false; r.lastLoadAt = Date.now();
     s.tip = tip; s.syncedAt = Date.now();
-    addArrivals(r, s, notes, tip);
+    const arrived = addArrivals(r, s, notes, tip);
+    const settled = s.pending.filter((p) => p.status === "pending").length < openBefore;
     s.balance = balanceOf(r, s);
     await writeState(walletId, generation, s);
+    if ((view(r, s).inUse || r.historyRequested) && (r.forceScanNext || arrived || settled || r.scanAt === undefined || Date.now() - r.scanAt >= SCAN_EVERY_MS)) {
+      r.forceScanNext = false;
+      await scanHistory(walletId, r, s, a.address);
+      if (!current()) return;
+    }
     // The balance is up; the rows' real block times follow (one request per ~21 h of blocks).
     await fillBlockTimes(walletId, r, s, tip).catch(() => {});
   } catch (error) {
@@ -277,10 +293,12 @@ function markFailed(s: State, p: PendingSend) {
 /// fillBlockTimes puts the block's own time in.
 function addArrivals(r: Runtime, s: State, notes: NockNote[], tip: number) {
   const ownChange = new Set(s.pending.flatMap((p) => p.changeNotes)), rows = new Set(s.history.map((t) => t.id)), now = Date.now();
+  let added = false;
   for (const n of notes) {
     const id = noteId(n), firstSight = s.seen[id] === undefined;
     s.seen[id] = now;
-    if (!firstSight || ownChange.has(id) || rows.has(`note:${id}`)) continue;
+    if (!firstSight || ownChange.has(id) || rows.has(`note:${id}`) || scanCovers(n, s.history)) continue;
+    added = true;
     const exact = r.blockTimes.get(n.originPage);
     s.history.push({ id: `note:${id}`, kind: isMiningReward(n) ? "mined" : "received", amount: n.assets, height: n.originPage, time: exact ?? now - Math.max(0, tip - n.originPage) * BLOCK_MS, timeExact: exact !== undefined, status: "confirmed" });
   }
@@ -288,6 +306,70 @@ function addArrivals(r: Runtime, s: State, notes: NockNote[], tip: number) {
   // its most recent rows only.
   s.seen = Object.fromEntries(Object.entries(s.seen).filter(([, at]) => now - at < SEEN_MS));
   s.history = sortHistory(s.history).slice(0, HISTORY_LIMIT);
+  return added;
+}
+
+/// Same matching rules as NockWalletStore.merge: notes become transactions, and sends keep the
+/// recipient amount known on this device. Pending/failed sends belong to reconcileSends.
+export function mergeScan(history: NockTx[], entries: ScanEntry[]): NockTx[] {
+  let rows = history.map((r) => ({ ...r }));
+  const done = new Set<string>();
+  for (const e of entries) {
+    if (done.has(e.txId)) continue;
+    done.add(e.txId);
+    const old = rows.find((r) => r.id === e.txId);
+    if (old) {
+      if (old.status !== "confirmed") continue;
+      old.height = e.height; old.time = e.time; old.timeExact = true;
+      if (old.kind === "sent" && old.fee === undefined) old.fee = e.fee;
+      continue;
+    }
+    if (e.kind === "sent") {
+      rows.push({ id: e.txId, kind: "sent", amount: BigInt(e.amount) >= BigInt(e.fee) ? (BigInt(e.amount) - BigInt(e.fee)).toString() : e.amount,
+        fee: e.fee, counterparty: e.counterparties[0], txId: e.txId, height: e.height, time: e.time, timeExact: true, status: "confirmed" });
+    } else {
+      const notes = rows.filter((r) => r.id.startsWith("note:") && r.kind === e.kind && r.height === e.height);
+      const one = notes.find((r) => r.amount === e.amount);
+      let drop: NockTx[] = [];
+      if (one) drop = [one];
+      else if (notes.length) {
+        if (sum(notes.map((r) => r.amount)) !== BigInt(e.amount)) continue;
+        drop = notes;
+      }
+      rows = rows.filter((r) => !drop.includes(r));
+      rows.push({ id: e.txId, kind: e.kind, amount: e.amount, txId: e.kind === "mined" ? undefined : e.txId,
+        height: e.height, time: e.time, timeExact: true, status: "confirmed" });
+    }
+  }
+  const sendHeights = new Set(entries.filter((e) => e.kind === "sent").map((e) => e.height));
+  return rows.filter((r) => !(r.id.startsWith("note:") && r.kind === "received" && r.height !== undefined && sendHeights.has(r.height)));
+}
+
+export function scanCovers(note: NockNote, history: NockTx[]) {
+  const kind = isMiningReward(note) ? "mined" : "received";
+  return history.some((r) => !r.id.startsWith("note:") && r.status === "confirmed" && r.height === note.originPage && (r.kind === kind || r.kind === "sent" && kind === "received"));
+}
+
+/// Best effort, full first/daily; otherwise stop on the first page reaching known transactions.
+async function scanHistory(walletId: string, r: Runtime, s: State, address: string) {
+  const full = s.fullScanAt === undefined || Date.now() - s.fullScanAt >= FULL_SCAN_EVERY_MS;
+  const known = new Set(s.history.map((tx) => tx.id)), entries: ScanEntry[] = [];
+  let offset = 0, reachedEnd = false;
+  while (offset < HISTORY_LIMIT) {
+    const page = await scan.page(address, Math.min(full ? 200 : 25, HISTORY_LIMIT - offset), offset).catch(() => null);
+    if (runtimes.get(walletId) !== r) return;
+    if (!page) break;
+    entries.push(...page.entries);
+    offset += page.count;
+    if (!page.hasMore || offset >= HISTORY_LIMIT) { reachedEnd = true; break; }
+    if (!full && page.entries.some((e) => known.has(e.txId))) break;
+    if (!page.count) break;
+  }
+  if (!reachedEnd && !entries.length) return;
+  r.scanAt = Date.now();
+  if (full && reachedEnd) s.fullScanAt = r.scanAt;
+  s.history = sortHistory(mergeScan(s.history, entries)).slice(0, HISTORY_LIMIT);
+  await writeState(walletId, r.generation, s);
 }
 
 /// Real block times for rows still on an estimate: the last ~3.5 days of blocks in at most four requests.

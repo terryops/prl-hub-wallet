@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 const json = (file: string) => JSON.parse(readFileSync(new URL(file, import.meta.url), "utf8"));
 test("store locales disclose every actual permission with matching names/descriptions", () => {
   const manifest = json("../public/manifest.json"), pkg = json("../package.json");
-  assert.equal(pkg.version, "0.1.7"); assert.equal(manifest.version, pkg.version);
+  assert.equal(pkg.version, "0.1.8"); assert.equal(manifest.version, pkg.version);
   assert.deepEqual(manifest.permissions, ["storage", "alarms", "sidePanel", "identity"]);
   assert.deepEqual(manifest.host_permissions, ["https://blockbook.pearlresearch.ai/*", "https://blockbook.testnet.pearlresearch.ai/*", "https://pearlhub.net/*"]);
   // The backup Nockchain node: asked for only from the NOCK page, so updates don't disable the extension.

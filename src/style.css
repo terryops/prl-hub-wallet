@@ -157,11 +157,6 @@ main { padding: 20px 22px; }
   }
   .balance-card { box-shadow: 0 5px 20px rgb(20 20 22 / .08); }
 }
-.address-card { margin: 16px 0 24px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
-.address-card > div { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: var(--muted); font-size: var(--font-12); margin-bottom: 10px; }
-.address-card button { min-height: 30px; padding: 4px 8px; border: 0; color: var(--blue-text); font-size: var(--font-12); }
-.address-card button .icon { width: 15px; height: 15px; }
-.address-card code { display: block; padding: 10px 12px; background: var(--soft); border-radius: 10px; }
 .section { margin: 24px 0; }
 .section > small { display: block; margin-top: 8px; line-height: 1.7; }
 .fine-print { margin-top: 10px; }
@@ -172,6 +167,7 @@ main { padding: 20px 22px; }
 .section-heading h2 { margin: 0; }
 .section-heading > button { min-height: 36px; padding: 7px 12px; font-size: var(--font-12); }
 .manage-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.scan-status { margin: -8px 0 12px; color: var(--muted); font-size: var(--font-12); }
 .manage-grid button { min-width: 0; min-height: 64px; justify-content: flex-start; gap: 10px; padding: 14px 12px; background: var(--surface); text-align: left; overflow-wrap: break-word; hyphens: auto; font-size: var(--font-12); }
 .manage-grid button:hover { background: var(--hover); }
 .manage-grid > button:last-child:nth-child(odd) { grid-column: 1 / -1; }
@@ -347,15 +343,17 @@ dd { min-width: 0; margin: 0; text-align: right; overflow-wrap: anywhere; font-v
 .donation-intro { text-align: center; margin: 20px 0; }
 .donation-presets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .donation-presets button { padding: 12px 4px; }
+/* .field-note pulls itself up under an input; under the preset buttons it overlapped them. */
+.donation-presets + .field-note { margin-top: 6px; }
 .donation-address { display: block; font-size: clamp(10px, 3vw, 12px); line-height: 1.7; hyphens: none; word-break: normal; overflow-wrap: normal; user-select: all; }
 .donation-address span { display: block; white-space: nowrap; }
 .web-links { display: grid; gap: 12px; padding: 18px 0 0; margin-top: 12px; border-top: 1px solid var(--line); font-size: var(--font-12); overflow-wrap: anywhere; }
 .web-links a { display: block; }
 .web-links small { font-size: var(--font-12); }
 
-.address-card, .pending, .contact, .empty { border-radius: 20px; }
+.pending, .contact, .empty { border-radius: 20px; }
 @media (max-width: 640px) {
-  .address-card, .pending, .contact, .empty { border-radius: 16px; }
+  .pending, .contact, .empty { border-radius: 16px; }
   dialog { width: 100%; max-width: none; max-height: 90dvh; margin: auto 0 0; border-radius: 20px 20px 0 0; border-bottom: 0; }
   .dialog-inner { --dialog-pad-x: 16px; padding: 20px 16px calc(20px + env(safe-area-inset-bottom)); }
 }
@@ -394,13 +392,12 @@ dd { min-width: 0; margin: 0; text-align: right; overflow-wrap: anywhere; font-v
 .nock-link { display: flex; width: 100%; min-height: 36px; margin: 18px 0 0; padding: 6px 4px; gap: 6px; border: 0; background: transparent; color: var(--muted); font-size: var(--font-12); font-weight: 500; }
 .nock-link:hover { background: transparent; color: var(--blue-text); }
 .nock-link-name { color: var(--blue-text); white-space: nowrap; }
-.nock-link-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nock-strip { display: flex; width: 100%; min-height: 48px; margin: 0 0 12px; padding: 8px 14px; gap: 10px; justify-content: flex-start; border-radius: 14px; background: var(--surface); color: var(--muted); font-weight: 500; }
 .nock-strip:hover { background: var(--hover); }
 .nock-strip-name { font-size: var(--font-14); }
 .nock-strip-value { display: flex; flex: 1; align-items: baseline; justify-content: flex-end; gap: 8px; min-width: 0; font-variant-numeric: tabular-nums; }
 .nock-strip-value b { font-size: var(--font-14); font-weight: 550; white-space: nowrap; }
-.nock-strip-value b[data-cached="true"], .nock-hero .balance[data-cached="true"] { opacity: .65; }
+.nock-strip-value b[data-cached="true"], .nock-summary .balance[data-cached="true"] { opacity: .65; }
 .nock-strip-value small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nock-strip-value .icon { width: 16px; height: 16px; }
 .nock-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--line); border-top-color: var(--muted); border-radius: 50%; animation: nock-spin .8s linear infinite; }
@@ -409,7 +406,36 @@ dd { min-width: 0; margin: 0; text-align: right; overflow-wrap: anywhere; font-v
 .nock-back { min-height: 32px; padding: 4px 8px 4px 2px; gap: 2px; border: 0; background: transparent; color: var(--blue-text); font-size: var(--font-14); }
 .nock-back:hover { background: transparent; text-decoration: underline; }
 .nock-back .icon { width: 16px; height: 16px; transform: rotate(90deg); }
-.nock-hero .balance-heading { gap: 6px; }
+.nock-title { margin: 0 0 12px; font-size: var(--font-16); font-weight: 600; }
+.nock-summary { padding: 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); text-align: start; }
+.nock-summary .balance-heading, .nock-summary .balance-heading button { gap: 6px; color: var(--muted); }
+.nock-price { color: var(--muted); font-size: var(--font-13); font-variant-numeric: tabular-nums; }
+.nock-summary .balance { margin: 8px 0 2px; justify-content: flex-start; color: var(--text); }
+.nock-summary .balance-number { font-size: 28px; font-weight: 600; }
+.nock-summary .balance > small { color: var(--muted); font-size: var(--font-13); }
+.nock-summary .fiat-slot { text-align: start; min-height: 20px; color: var(--muted); }
+.nock-summary .fiat { color: var(--muted); font-size: var(--font-13); }
+.nock-locked { margin: 12px 0 0; padding-top: 12px; border-top: 1px solid var(--line); }
+.nock-locked > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 3px 0; }
+.nock-locked > div + div { color: var(--muted); font-size: var(--font-12); }
+.nock-locked dt { min-width: 0; }
+.nock-locked dd { margin: 0; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.nock-actions { display: flex; margin: 12px 0 18px; padding: 4px 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.nock-actions button { flex: 1; min-width: 0; min-height: 40px; padding: 8px 4px; gap: 6px; border: 0; border-radius: 0; background: transparent; color: var(--text); font-size: var(--font-13); }
+.nock-actions button + button { border-inline-start: 1px solid var(--line); }
+.nock-recent { margin-bottom: 18px; padding: 12px 16px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); text-align: start; }
+.nock-recent-head { display: flex; align-items: center; justify-content: space-between; min-height: 24px; color: var(--muted); font-size: var(--font-12); font-weight: 600; }
+.nock-recent-head .text-button { padding: 2px 0; font-size: var(--font-12); font-weight: 500; }
+.nock-recent-empty { display: grid; place-items: center; min-height: 60px; margin: 0; color: var(--muted); font-size: var(--font-12); }
+.nock-recent .nock-row { margin: 0 -4px; }
+.nock-actions .action-icon { display: contents; }
+.nock-actions .icon { width: 16px; height: 16px; color: var(--muted); }
+.nock-seed-note { display: flex; flex-direction: column; gap: 3px; margin-top: 20px; padding: 0 12px; color: var(--muted); font-size: var(--font-12); text-align: center; }
+.nock-seed-note > span { display: flex; align-items: center; justify-content: center; gap: 5px; }
+.nock-seed-note .icon { width: 13px; height: 13px; }
+.nock-seed-note small { font-size: 11px; }
+.nock-history .nock-row { cursor: pointer; }
+.nock-row .tx-icon { color: var(--muted); background: var(--soft); }
 .nock-toast { margin: 0 0 12px; border: 0; border-radius: 12px; color: var(--green); font-weight: 600; }
 .nock-problem { display: flex; align-items: flex-start; gap: 8px; color: var(--warn); }
 .nock-problem .icon { width: 16px; height: 16px; margin-top: 1px; }
@@ -419,7 +445,7 @@ dd { min-width: 0; margin: 0; text-align: right; overflow-wrap: anywhere; font-v
 .nock-info p { margin: 0; color: var(--muted); }
 .receipt .nock-info { background: var(--soft); }
 .nock-row.failed .tx-amount b { color: var(--muted); text-decoration: line-through; }
-.nock-row .tx-amount b.incoming, .review-amount.incoming { color: var(--green); }
+.nock-row .tx-amount b, .nock-detail .review-amount { color: var(--text); }
 .nock-row .tx-amount b small { display: inline; font-weight: 500; }
 .nock-row .tx-amount > small { display: block; }
 .nock-pending { color: var(--warn) !important; }

@@ -22,7 +22,7 @@ try {
   assert.equal(await page.locator(".market-line").count(), 0);
   await button("↓ 收款").click(); await page.locator(".qr").waitFor(); await closeDialog();
   market.mode = "both";
-  await page.locator('#wallet-settings').click(); await page.getByLabel("钱包网络").selectOption("testnet"); await page.locator(".address-card code").filter({ hasText: "tprl1" }).waitFor();
+  await page.locator('#wallet-settings').click(); await page.getByLabel("钱包网络").selectOption("testnet"); await page.locator(".notice").filter({ hasText: "当前为测试网" }).waitFor();
   assert.equal(await page.locator(".market-line").count(), 0); assert.equal(await page.locator(".donate-entry,.web-links").count(), 0);
   const requestsBefore = market.requests.length; await page.waitForTimeout(200); assert.equal(market.requests.length, requestsBefore);
   await page.locator('#wallet-settings').click(); await page.getByLabel("钱包网络").selectOption("mainnet"); await page.locator(".fiat").waitFor();

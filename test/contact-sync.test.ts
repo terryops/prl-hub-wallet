@@ -46,6 +46,25 @@ test("account contact sync retries revisions, adopts remote edits, keeps other s
     assert.equal(config.contacts[0].deleted, true, "an older browser's opaque settings cannot revive deleted contacts");
   } finally { globalThis.fetch = original; }
 });
+test("a 到达目标价 (reach) price alert in the account does not stop contact sync, and is kept", async () => {
+  // pearlhub.net and the apps save reach alerts since 2026-10-21; the wallet's older copy of store.ts
+  // refused the whole config ("invalid_config"), so contact sync failed for anyone who had one.
+  const userId = "u_account-fixture", original = fetch;
+  const storage: Record<string, unknown> = { [ACCOUNT]: { user_id: userId, access_token: "A".repeat(43), refresh_token: "B".repeat(43), expires_at: Date.now() + 900000 }, [CONTACTS]: [contact], [CONTACT_LINK]: { userId, base: {} } };
+  Object.assign(globalThis, { chrome: { storage: { local: { get: async (key: string) => ({ [key]: storage[key] }), set: async (rows: object) => Object.assign(storage, rows) } } } });
+  const reach = { id: "RULE-REACH", updated: 5, kind: "reach", value: 2.5, window: 0, enabled: true, seen_fired: 0 };
+  let config = { ...configOf(defaults()), rules: [reach] }, puts = 0;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith("/v1/account")) return Response.json({ pro: true });
+    if (init!.method === "GET") return Response.json({ rev: puts, schema_version: 1, data: config });
+    puts++; config = JSON.parse(init!.body as string).data; return Response.json({});
+  };
+  try {
+    await syncContacts(() => {});
+    assert.equal(puts, 1); assert.equal(config.contacts[0].id, contact.id);
+    assert.deepEqual(config.rules, [reach]);
+  } finally { globalThis.fetch = original; }
+});
 test("contacts declined at a free sign-in are not uploaded once the account has Pro", async () => {
   const userId = "u_account-fixture", original = fetch, declined = { ...contact, id: "declined", address: vectors.addresses[1] }, added = { ...contact, id: "added" };
   const storage: Record<string, unknown> = { [ACCOUNT]: { user_id: userId, access_token: "A".repeat(43), refresh_token: "B".repeat(43), expires_at: Date.now() + 900000 }, [CONTACTS]: [declined, added], [CONTACT_LINK]: { userId, base: {}, localOnly: ["declined"] } };

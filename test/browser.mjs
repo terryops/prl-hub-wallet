@@ -73,7 +73,10 @@ try {
   await page.getByLabel("再次输入密码", { exact: true }).fill("public-test-password");
   await page.getByRole("button", { name: "保存钱包", exact: true }).click();
   await page.locator(".balance").filter({ hasText: "3.50" }).waitFor();
-  assert.equal(await page.locator(".address-card code").innerText(), vectors.addresses[0]);
+  // The home has no address card (as on iOS): the receiving address is under Receive.
+  await page.getByRole("button", { name: "↓ 收款" }).click();
+  assert.equal(await page.locator(".receive code").innerText(), vectors.addresses[0]);
+  await page.getByRole("button", { name: "关闭", exact: true }).click();
   const persisted = await worker.evaluate(() => chrome.storage.local.get(null));
   assert.equal(JSON.stringify(persisted).includes("abandon"), false);
   const denied = await rpc("backup", { password: "wrong-password" }); assert.equal(denied.ok, false);
@@ -144,7 +147,7 @@ try {
   check("create second wallet with verified mnemonic backup");
   await page.locator('#wallet-settings').click();
   await page.getByLabel("钱包网络").selectOption("testnet");
-  await page.locator(".address-card code").filter({ hasText: "tprl1" }).waitFor(); check("testnet switch");
+  await page.locator(".notice").filter({ hasText: "当前为测试网" }).waitFor(); check("testnet switch");
   await page.getByRole("button", { name: "钱包设置" }).click();
   await page.getByLabel("钱包名称", { exact: true }).fill("备用钱包");
   await page.getByRole("button", { name: "保存名称" }).click();

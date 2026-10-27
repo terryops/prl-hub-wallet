@@ -18,7 +18,7 @@ type Rpc = <T>(command: string, data?: Record<string, unknown>) => Promise<T>;
 type Common = { lang: Lang; rpc: Rpc; walletId: string; secondary: string; rates?: Record<string, number> };
 type Row = NockView["history"][number];
 const STALE_MS = 30000;
-const explorer = (txId: string) => `https://nockscan.net/tx/${encodeURIComponent(txId)}`;
+const explorer = (txId: string) => `https://nockscan.com/tx/${encodeURIComponent(txId)}`;
 
 function useText(lang: Lang) {
   const t = (key: TextKey, values?: Record<string, string | number>) => translate(lang, key, values);
@@ -59,7 +59,7 @@ export function NockEntry({ lang, rpc, walletId, secondary, rates, slot, onOpen 
     return () => { live = false; clearTimeout(timer); };
   }, [walletId, slot]);
   if (!status) return null;
-  if (slot === "link") return status.inUse ? null : <button className="nock-link" onClick={onOpen}><NockBadge size="small" /><span className="nock-link-name">{t("NOCK 钱包")}</span><span aria-hidden="true">·</span><span className="nock-link-note">{t("和 PRL 共用助记词")}</span><Icon name="chevron" className="nock-chevron" /></button>;
+  if (slot === "link") return status.inUse ? null : <button className="nock-link" onClick={onOpen}><NockBadge size="small" /><span className="nock-link-name">{t("NOCK 钱包")}</span><Icon name="chevron" className="nock-chevron" /></button>;
   if (!status.inUse) return null;
   const total = status.balance.total;
   return <button className="nock-strip" aria-label={status.hasBalance ? t("NOCK 余额 {amount}", { amount: nock(total) }) : t("NOCK 钱包")} onClick={onOpen}>
@@ -87,7 +87,7 @@ function QR({ value, alt }: { value: string; alt: string }) {
   return <img className="qr" src={code.createDataURL(5, 10)} alt={alt} />;
 }
 
-type Panel = "receive" | "send" | "tx" | null;
+type Panel = "receive" | "send" | "history" | "tx" | null;
 type Props = Common & {
   copy: (text: string) => void;
   onBack: () => void;
@@ -99,7 +99,7 @@ type Props = Common & {
   backHandler: { current: (() => boolean) | null };
 };
 
-/// The NOCK page: balance, receive, send and the history this device has kept.
+/// The NOCK page: balance, receive, send and the merged nockscan/local history.
 export function NockPage({ lang, rpc, walletId, secondary, rates, copy, onBack, android, secret, confirmNote, backHandler }: Props) {
   const { t, text, nock } = useText(lang);
   const [status, setStatus] = useState<NockView | null>(null), [usd, setUsd] = useState<number>();
@@ -114,7 +114,7 @@ export function NockPage({ lang, rpc, walletId, secondary, rates, copy, onBack, 
   const read = (command: string, data: Record<string, unknown> = {}) => rpc<NockView>(command, data).then((v) => { if (live.current) setStatus(v); return v; });
   async function refresh() {
     setRefreshing(true);
-    try { await read("nock-refresh"); void loadNockPrice().then((p) => { if (live.current) setUsd(p); }); }
+    try { await read("nock-refresh", { history: true }); void loadNockPrice().then((p) => { if (live.current) setUsd(p); }); }
     catch { /* The status shows the problem; the next poll tries again. */ }
     finally { if (live.current) setRefreshing(false); }
   }
@@ -125,7 +125,7 @@ export function NockPage({ lang, rpc, walletId, secondary, rates, copy, onBack, 
       if (!live.current) return;
       if (document.visibilityState !== "visible") { poll(wait); return; }
       void loadNockPrice().then((p) => { if (live.current) setUsd(p); });
-      void read("nock-refresh", { stale: STALE_MS }).then((v) => poll(v.pollMs), () => poll(60000));
+      void read("nock-refresh", { stale: STALE_MS, history: true }).then((v) => poll(v.pollMs), () => poll(60000));
     }, wait); };
     void read("nock-status").catch(() => {}).finally(() => poll(0));
     return () => { live.current = false; clearTimeout(timer); };
@@ -152,10 +152,7 @@ export function NockPage({ lang, rpc, walletId, secondary, rates, copy, onBack, 
     ? t("{problem}，显示的是 {time} 的数据", { problem: text(status.syncError), time: new Date(status.syncedAt).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" }) })
     : t("{problem}，稍后自动重试", { problem: text(status.syncError) }));
   // Block rewards wait 100 blocks (~4 hours) before they can be spent.
-  const wait = status.blocksUntilNextUnlock === undefined ? undefined : (() => {
-    const minutes = Math.floor(status.blocksUntilNextUnlock * 150 / 60);
-    return minutes >= 90 ? t("约 {count} 小时", { count: Math.round(minutes / 60) }) : t("约 {count} 分钟", { count: Math.max(1, minutes) });
-  })();
+  const lockHours = Math.round(100 * 150 / 3600);
 
   // Send form state.
   const nicks = parseNock(amount), isMax = maxText !== null && amount === maxText;
@@ -202,9 +199,9 @@ export function NockPage({ lang, rpc, walletId, secondary, rates, copy, onBack, 
   const row = (tx: Row) => {
     const incoming = tx.kind !== "sent";
     return <article className={`transaction nock-row${tx.status === "failed" ? " failed" : ""}`} key={tx.id} onClick={() => { setTxId(tx.id); setPanel("tx"); }}>
-      <span className={incoming ? "tx-icon incoming" : "tx-icon"}><Icon name={tx.kind === "mined" ? "cube" : incoming ? "received" : "sent"} /></span>
+      <span className="tx-icon"><Icon name={tx.kind === "mined" ? "cube" : incoming ? "received" : "sent"} /></span>
       <div className="tx-main"><strong>{t(tx.kind === "received" ? "收到" : tx.kind === "mined" ? "挖矿收入" : "发出")}</strong><small className="tx-meta"><span>{new Date(tx.time).toLocaleString(lang, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</span></small></div>
-      <div className="tx-amount"><b className={incoming && tx.status !== "failed" ? "incoming" : undefined}>{incoming ? "+" : "−"}{formatNock(tx.amount, lang, 4)} <small>NOCK</small></b>{statusLine(tx)}</div>
+      <div className="tx-amount"><b>{incoming ? "+" : "−"}{formatNock(tx.amount, lang, 4)} <small>NOCK</small></b>{statusLine(tx)}</div>
       <button className="icon-button tx-open" aria-label={t("交易详情")} title={t("交易详情")} onClick={(e) => { e.stopPropagation(); setTxId(tx.id); setPanel("tx"); }}><Icon name="chevron" /></button>
     </article>;
   };
@@ -214,33 +211,39 @@ export function NockPage({ lang, rpc, walletId, secondary, rates, copy, onBack, 
   return <section className="nock-page">
     <BackRow t={t} onBack={onBack} />
     {toast && <div role="status" className="message nock-toast"><span>{toast}</span></div>}
-    <section className="balance-card nock-hero">
+    <h1 className="nock-title">{t("NOCK 钱包")}</h1>
+    <section className="nock-summary">
       <div className="balance-topline">
-        <div className="balance-heading"><NockBadge size="small" /><span>{t("NOCK 钱包")}</span><button title={t("刷新 ↻")} aria-label={t("刷新 ↻")} disabled={refreshing} onClick={() => void refresh()}><Icon name="refresh" /></button></div>
-        <div className="price-chip"><span>NOCK</span><strong>{usd !== undefined ? usdText(usd, lang) : "—"}</strong></div>
+        <div className="balance-heading"><NockBadge size="small" muted /><span>NOCK</span><button title={t("刷新 ↻")} aria-label={t("刷新 ↻")} disabled={refreshing} onClick={() => void refresh()}><Icon name="refresh" /></button></div>
+        <span className="nock-price">{usd !== undefined ? usdText(usd, lang) : "—"}</span>
       </div>
       <div className="balance" data-cached={status.balanceIsCached}>
         <span className="sr-only">{status.hasBalance ? t("NOCK 余额 {amount}", { amount: nock(balance.total) }) : t("同步余额…")}</span>
         <span className="balance-number" aria-hidden="true">{status.hasBalance ? formatNock(balance.total, lang, 4) : "——"}</span><small aria-hidden="true">NOCK</small>
       </div>
       <div className="fiat-slot">{status.hasBalance ? usd !== undefined ? <span className="fiat">≈ {dualFiat(nockNumber(balance.total) * usd, secondary, lang, rates)}</span> : <span aria-hidden="true">—</span> : t("同步余额…")}</div>
+      {BigInt(balance.locked) > 0n && <dl className="nock-locked">
+        <div><dt>{t("可用")}</dt><dd>{nock(balance.available, 2)}</dd></div>
+        <div><dt>{t("锁定 · 挖矿收入约 {count} 小时后可用", { count: lockHours })}</dt><dd>{nock(balance.locked, 2)}</dd></div>
+      </dl>}
     </section>
     {problemLine && <p className="notice nock-problem" role="status"><Icon name="warning" /><span>{problemLine}</span></p>}
     {status.offerSecondNode && <SecondNodeOffer t={t} onAllowed={() => void refresh()} />}
-    {BigInt(balance.locked) > 0n && <div className="nock-info"><Icon name="lock" /><div><strong>{t("可用 {amount}", { amount: nock(balance.available, 4) })}</strong><p>{wait ? t("其中 {amount} 是挖矿收入，要等 100 个区块才能使用。下一笔解锁还要{wait}。", { amount: nock(balance.locked, 4), wait }) : t("其中 {amount} 是挖矿收入，要等 100 个区块才能使用。", { amount: nock(balance.locked, 4) })}</p></div></div>}
-    <div className="balance-actions">
+    <div className="nock-actions">
       <button aria-label={t("收 NOCK")} onClick={() => { setResult(null); setPanel("receive"); }}><span className="action-icon"><Icon name="qr" /></span><span>{t("收款")}</span></button>
       <button aria-label={t("转 NOCK")} onClick={openSend}><span className="action-icon"><Icon name="send" /></span><span>{t("转账")}</span></button>
+      <button aria-label={t("NOCK 记录")} onClick={() => setPanel("history")}><Icon name="history" /><span>{t("记录")}</span></button>
     </div>
-    <section className="section">
-      <div className="section-heading"><h2>{t("NOCK 记录")}</h2></div>
-      {!status.history.length ? <p className="empty">{status.backendReady ? <>{t("暂无交易记录")}<small>{t("你的收发记录会显示在这里")}</small></> : problemLine || t("同步中…")}</p> : status.history.map(row)}
-      {status.history.length > 0 && <small className="nock-footnote">{t("记录由本机保存：收到的每一笔从本机第一次看到它时算起，换设备或重装后只能看到当前持有的部分。")}</small>}
+    {/* iOS NockWalletView.recent: a small card with the last three, 全部 once there are any. */}
+    <section className="nock-recent">
+      <div className="nock-recent-head"><span>{t("最近交易")}</span>{status.history.length > 0 && <button className="text-button" onClick={() => setPanel("history")}>{t("全部")}</button>}</div>
+      {!status.history.length ? <p className="nock-recent-empty">{status.backendReady ? t("暂无交易记录") : problemLine || t("同步中…")}</p> : status.history.slice(0, 3).map(row)}
     </section>
-    <div className="nock-info"><Icon name="key" /><div><strong>{t("和 PRL 共用助记词")}</strong><p>{t("用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。")}</p></div></div>
+    <footer className="nock-seed-note"><span><Icon name="key" />{t("和 PRL 共用助记词")}</span><small>{t("用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。")}</small></footer>
 
     <dialog ref={dialog} className="nock-dialog" onCancel={(e) => { e.preventDefault(); if (!sending) closePanel(); }} onClick={(e) => { if (e.target === dialog.current && !sending && !preparing) closePanel(); }}><div className="dialog-inner">
-      <div className="dialog-title"><h2>{panel === "receive" ? t("收 NOCK") : panel === "send" ? prepared ? t("确认转账") : t("转 NOCK") : t("交易详情")}</h2><button className="icon-button" aria-label={t("关闭")} disabled={sending} onClick={closePanel}><Icon name="close" /></button></div>
+      <div className="dialog-title"><h2>{panel === "history" ? t("NOCK 记录") : panel === "receive" ? t("收 NOCK") : panel === "send" ? prepared ? t("确认转账") : t("转 NOCK") : t("交易详情")}</h2><button className="icon-button" aria-label={t("关闭")} disabled={sending} onClick={closePanel}><Icon name="close" /></button></div>
+      {panel === "history" && <section className="nock-history">{status.history.length ? status.history.map(row) : <p className="empty">{t("暂无交易记录")}</p>}<small className="nock-footnote">{t("记录从区块浏览器 nockscan.com 读取，换设备或重装后也能看到。")}</small></section>}
 
       {panel === "receive" && <div className="receive">
         {status.address ? <><QR value={status.address} alt={t("NOCK 收款地址 · Nockchain 主网")} /><p className="nock-receive-label">{t("NOCK 收款地址 · Nockchain 主网")}</p><code>{status.address}</code>
@@ -310,7 +313,7 @@ function TxView({ tx, t, nock, lang, copy }: { tx: Row; t: (key: TextKey, values
   const sent = tx.kind === "sent", groups = tx.counterparty ? addressGroups(tx.counterparty) : [];
   const state = tx.status === "pending" ? t("待确认") : tx.status === "failed" ? t("未上链：节点已丢弃这笔交易，金额已退回余额") : tx.confirmations !== undefined ? t("{count} 确认", { count: tx.confirmations }) : t("已确认");
   return <div className="nock-detail">
-    <div className="receipt-hero"><div className={`review-amount${sent ? "" : " incoming"}`}><span>{sent ? "−" : "+"}{formatNock(tx.amount, lang)}</span><small>NOCK</small></div><p className={tx.status === "pending" ? "tx-status" : "muted"}>{state}</p></div>
+    <div className="receipt-hero"><div className="review-amount"><span>{sent ? "−" : "+"}{formatNock(tx.amount, lang)}</span><small>NOCK</small></div><p className={tx.status === "pending" ? "tx-status" : "muted"}>{state}</p></div>
     <section className="receipt-section">
       <h3>{t("详情")}</h3>
       <div className="receipt-card">

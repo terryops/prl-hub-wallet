@@ -225,7 +225,15 @@ export async function loadAccount(publicKey: string, network: Network, walletId:
     network, walletId, utxos,
     balance: utxos.filter((u) => (u.confirmations || 0) > 0).reduce((s, u) => s + BigInt(u.value), 0n).toString(),
     pending: utxos.filter((u) => !u.confirmations).reduce((s, u) => s + BigInt(u.value), 0n).toString(),
-    history: [...allTxs.values()].map((tx) => { const peer = transactionPeer(tx, historyMine); return { txid: tx.txid, time: tx.blockTime || 0, confirmations: tx.confirmations || 0, delta: (ownValue(tx.vout || []) - ownValue(tx.vin || [])).toString(), amount: (peer.sent ? (tx.vout || []).filter((io) => !(io.addresses || []).some((a) => historyMine.has(a.toLowerCase()))).reduce((n, io) => n + BigInt(io.value || "0"), 0n) : ownValue(tx.vout || [])).toString(), fee: tx.fees || "0", ...peer }; }).sort((a, b) => b.time - a.time),
+    history: [...allTxs.values()].map((tx) => {
+      const peer = transactionPeer(tx, historyMine), received = ownValue(tx.vout || []), spent = ownValue(tx.vin || []);
+      // A send that also spends other people's coins (a joint transaction or a sweep) pays them more than
+      // left this wallet: show what went to others, capped at this wallet's own net loss. Same rule as
+      // pearlhub.net's watch wallet since 2026-10-26 (prl-hub alerts/src/chain.js).
+      const paid = peer.sent ? (tx.vout || []).filter((io) => !(io.addresses || []).some((a) => historyMine.has(a.toLowerCase()))).reduce((n, io) => n + BigInt(io.value || "0"), 0n) : 0n;
+      const lost = spent > received ? spent - received : 0n;
+      return { txid: tx.txid, time: tx.blockTime || 0, confirmations: tx.confirmations || 0, delta: (received - spent).toString(), amount: (peer.sent ? (lost > 0n && lost < paid ? lost : paid) : received).toString(), fee: tx.fees || "0", ...peer };
+    }).sort((a, b) => b.time - a.time),
     page, hasMore: page < (first.totalPages || 1), changeAddresses: [...changes], addressPaths: Object.fromEntries([...mine].filter(([a, d]) => d.index >= 200 && (changes.has(a) || utxos.some((u) => u.address === a))).map(([a, d]) => [a, `${accountPath(network)}/${d.branch}/${d.index}`])),
     // reduce, not Math.max(...spent): a full scan can return more transactions than a call accepts as arguments.
     scanHeight: spent.reduce((height, tx) => (tx.confirmations || 0) > 0 ? Math.max(height, tx.blockHeight || 0) : height, options.fromHeight || 0), time: Date.now(), indexer: at[0]

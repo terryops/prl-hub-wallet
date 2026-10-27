@@ -34,8 +34,9 @@ Pearl Hub publishes (version 0.1.2 and later) are built from it; see
 - NOCK (Nockchain): the same recovery phrase also opens a NOCK address, derived as the
   official Nockchain wallet does. Once you open NOCK, its balance comes from NockBox's public
   node `rpc.nockbox.org` (requests carry identifiers derived from that address), NOCK
-  transactions signed in the extension are broadcast there, and the NOCK price comes from
-  `api.coingecko.com` without any address or identity. If `rpc.nockbox.org` can't be reached
+  transactions signed in the extension are broadcast there, its transaction history is read
+  from the block explorer `nockscan.com` (which receives the NOCK address), and the NOCK price
+  comes from `api.coingecko.com` without any address or identity. If `rpc.nockbox.org` can't be reached
   (its gateway refuses some networks), the NOCK page offers the node the official Nockchain
   wallet uses by default, `216.158.95.10` (plain HTTP, no CORS): Chrome then asks you for that
   one optional site permission, and only once granted does the extension use it, as a second

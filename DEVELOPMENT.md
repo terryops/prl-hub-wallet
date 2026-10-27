@@ -13,7 +13,7 @@ prl-hub-wallet/  本仓库
 
 ## 安装开发测试版
 
-1. 解压 `pearl-hub-wallet-0.1.7.zip` 到固定目录。
+1. 解压 `pearl-hub-wallet-0.1.8.zip` 到固定目录。
 2. 打开 Chrome 的「扩展程序 → 管理扩展程序」，开启「开发者模式」。
 3. 点击「加载已解压的扩展程序」，选择解压后的目录。仓库内也可以直接选择 `dist/`。
 4. 将 PRL Wallet 固定到工具栏，点击图标打开侧边栏；右上角 ↗ 可打开完整页面。
@@ -354,3 +354,23 @@ SF Symbols 的授权只允许用于 Apple 平台的软件，不能随跨平台�
 **验证**：`test/nock-core.test.ts` 用原生构建的 27 组请求/回复（`nock-core/tests/vectors.rs` 生成的 `test/nock-vectors.json`，含签名交易）逐字节核对 WASM；`test/nock-service.test.ts` 用替身节点测余额、到账记录、发送、结果不明、拒绝、丢弃、删除钱包；`test/nock.mjs`（`npm run qa:nock`，已并入 `npm run qa`）在真实 Chromium 插件里用替身节点（`test/nock-fixtures.json`）走完入口、页面、收款、转账、密码错误、MAX、结果不明、详情、离线、nockbox 返回 503 时提出并（授权后）使用备用节点、16 种语言 320 px。另用真实节点只读验证过两个节点的余额、交易详情、区块时间和 mempool 查询；prl-hub-android 的 `qa/nock.mjs` 在模拟器上验证了 CSP 下的 WASM、两个节点（屏蔽 rpc.nockbox.org 后经 `nock.rpc` 读取）。没有发送过真实交易。
 
 **商店资料（0.1.7）**：简短说明（`_locales` 和 `store/*.json`）加上 NOCK；英文详细说明加了 NOCK 一段，并把「Blockbook 接收查询」改成先走自建索引；其他 15 种语言的详细说明、权限理由和数据使用说明按英文重新翻译（之前的版本由界面提示语拼成，还夹着英文段落）。`permissionJustifications` 多了可选权限 `http://216.158.95.10/*`，`test/store.test.ts` 要求可选权限也有理由。后台要手动改的单一用途、主机权限理由和审核说明见 `store/SUBMIT.md` 第八节；`scripts/store-release.mjs` 新增 `upload`（只传草稿）和 `publish`（提交已上传的草稿），用于先传包、改后台、再提交。
+
+## 0.1.8（2026-10-27）
+
+**插件里看得到的变化**
+
+- **NOCK 记录**：完整的地址历史改从区块浏览器 nockscan.com 读取（`src/nock/scan.ts`，对应 iOS `NockClient.swift` 的 NockScan），和本机看到的 note、发出的交易合并（`mergeScan`），所以换设备或重装后也能看到。只在用过 NOCK（打开过 NOCK 页或有余额、记录）之后才查询，请求里带 NOCK 地址。第一次和每天一次读全量，平时读到已知交易就停。nockscan.com 返回 `access-control-allow-origin: *`，不需要站点权限，只在 CSP 加了它。「在区块浏览器查看」也从 nockscan.net 改到 nockscan.com。
+- **NOCK 页面**：按 iOS 重新排版。标题、余额卡（有锁定的挖矿收入时分「可用」和「锁定 · 约 N 小时后可用」两行）、收款 / 转账 / 记录一排按钮、「最近交易」只列最近三笔，「全部」打开完整记录。
+- **PRL 钱包首页**：去掉了收款地址卡片（地址在「收款」里），和 iOS 一致；pearlhub.net 的观察钱包同时去掉了同样的卡片。
+- **检查历史找零**：扫描时按钮下面显示「正在检查历史找零…」，结束后显示「历史找零已检查完毕，余额已更新。」，以前没有任何提示。
+- **发出金额**：一笔交易里还有别人的输入时（联合交易、归集），历史列表的发出金额以本钱包的净流出为上限，以前会显示别人那部分（`src/chain.ts`，和 pearlhub.net 的 Worker 2026-10-26 的修复同一规则）。普通转账不受影响。
+- **通讯录同步**：账户里有「到达目标价」（`reach`）价格提醒时，0.1.7 的 `shared/store.ts` 把整份配置判为 `invalid_config`，同步失败（与 0.1.3 的 Jetski 是同一类问题）。`npm run sync:shared` 带来了 web 现在的 `store.ts` / `types.ts`；`shared/security-overview-locales.json` 保留本仓库的版本（`extNock`、`extOthers` 加了 nockscan.com），web 那边在 wallet-018 发布里改成同一份。
+- 捐赠页预设金额下面的提示不再和按钮重叠。
+
+**Android App 里的钱包（同一份代码，`ANDROID` 分支）**
+
+按 iOS 补齐：钱包列表可以改任意钱包的名字，新钱包按「Pearl Wallet」「Pearl Wallet 2」命名；助记词校验改成随机三个位置选词；显示或输入助记词时禁止截屏，粘贴的助记词在保存后清出剪贴板；每次启动回到主地址，加了「回到主地址」；找回搁浅的找零可以转到别的地址，并改成扫描后列出结果的弹窗；首页最近三笔交易，下面是「价格提醒」「桌面小组件」各一行；一次性捐赠提示（启动 10 次且跨度至少 5 天）；转账时即时检查地址格式、8 位小数和 0.001 PRL 手续费预留；未连上链时先显示上次的余额（变暗）；有未确认交易时每 15 秒刷新，否则 60 秒，回到前台也刷新；设置页通过 `window.__pearlWallet`（`shared/android-host.ts`）操作钱包；App 更新提示（`src/android/update.ts`、`UpdateBanner.tsx`：官网 APK 读 pearlhub.net 的 `latest.json`，Play 版问 Google Play）；触屏上的悬停样式只在按住时显示（`scripts/touch-hover.mjs`，prl-hub-web 有同一份）。这些要随下一版 Android App 发布。
+
+**商店与说明**：`store/*.json` 16 种语言的详细说明和数据使用说明加了 nockscan.com；`public/privacy.html`、README 同步。后台要改的内容见 `store/SUBMIT.md` 第九节。
+
+**验证**：`npm test` 176/176（新增：账户里有 reach 提醒时同步成功且原样保留；有别人输入的发出金额只算本钱包的部分，两项在改动前都失败）、`tsc --noEmit`、插件与 Android 构建；浏览器 QA `browser` 15、`features` 8、`review-ui` 6、`transactions` 6、`nock` 9 项、`languages` 16 种语言，全部通过。
