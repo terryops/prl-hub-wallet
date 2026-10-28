@@ -65,9 +65,11 @@ const shots = async (name) => {
 
 try {
   // A wallet that never used NOCK: only the quiet link, and no Nockchain request at all.
-  const link = page.locator(".nock-link");
+  // A row of the wallet page's shortcut card with its own × (iOS 6a1e720).
+  const link = page.locator(".nock-link .shortcut-open");
   await link.waitFor();
   assert.equal((await link.innerText()).trim(), "NOCK 钱包");
+  assert.equal(await page.locator(".nock-link .shortcut-close").count(), 1);
   assert.equal(await page.locator(".nock-strip").count(), 0);
   await page.waitForTimeout(500);
   assert.equal(await calls(), 0, "the wallet page reads nothing from Nockchain until NOCK is used");
@@ -86,12 +88,11 @@ try {
   assert.deepEqual(await page.locator(".nock-actions button").allInnerTexts(), ["收款", "转账", "记录"]);
   await page.locator(".nock-recent-head").filter({ hasText: "最近交易" }).waitFor();
   assert.equal(await page.locator(".nock-recent .nock-row").count(), 3);
-  assert.equal(await page.locator(".nock-footnote").count(), 0, "the nockscan note is on the history page, as on iOS");
+  assert.equal(await page.locator(".nock-footnote").count(), 0, "no nockscan footnote (iOS 6a1e720)");
   assert.ok(await worker.evaluate(() => nockFixture.scans) > 0, "history asked of nockscan once NOCK is open");
   await shots("page");
   await page.locator(".nock-recent-head").getByRole("button", { name: "全部", exact: true }).click();
   assert.deepEqual((await dialog().locator(".nock-history .nock-row .tx-main strong").allInnerTexts()).sort(), ["收到", "收到", "挖矿收入", "挖矿收入"].sort());
-  await dialog().locator(".nock-footnote").filter({ hasText: "nockscan.com" }).waitFor();
   await dialog().getByRole("button", { name: "关闭", exact: true }).click();
   console.log("PASS page: 155 NOCK (85 available, 70 locked ~4 h), price and fiat, 3 recent rows, 4 in 全部");
 

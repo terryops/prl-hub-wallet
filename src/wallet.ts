@@ -6,7 +6,8 @@ import { hex } from "@scure/base";
 
 export type Network = "mainnet" | "testnet";
 export type UTXO = { txid: string; vout: number; value: string; address?: string; path?: string; confirmations?: number };
-export type Wallet = { id: string; name: string; mnemonic: string; receiveIndex: number; changeAddresses?: Partial<Record<Network, string[]>>; addressPaths?: Partial<Record<Network, Record<string, string>>>; scanHeight?: Partial<Record<Network, number>> };
+// `watch`: a read-only wallet (iOS WalletRecord.watchAddress): the one address it watches, no seed (`mnemonic` is "").
+export type Wallet = { id: string; name: string; mnemonic: string; receiveIndex: number; watch?: string; changeAddresses?: Partial<Record<Network, string[]>>; addressPaths?: Partial<Record<Network, Record<string, string>>>; scanHeight?: Partial<Record<Network, number>> };
 export type Pending = { txid: string; hex: string; walletId: string; network: Network; to: string; amount: string; fee: string; inputs: string[]; time: number; status: "unknown" | "submitted" | "rejected" };
 export type VaultData = { wallets: Wallet[]; selected: string; network: Network; pending: Pending[] };
 export const versions = (network: Network) => network === "mainnet"

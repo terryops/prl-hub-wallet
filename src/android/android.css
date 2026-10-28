@@ -46,8 +46,8 @@
 .phrase-tools button .icon { width: 14px; height: 14px; }
 .phrase-count-off { color: var(--warn); }
 
-/* The iOS wallet home (Dashboard.swift): the sync warning, the last three transfers, and the one-line
-   links to 价格提醒 and 桌面小组件. */
+/* The iOS wallet home (Dashboard.swift): the sync warning, and the last three transfers (the shortcut card
+   is in style.css). */
 .sync-banner { display: flex; align-items: flex-start; gap: 6px; margin: 10px 2px 0; color: var(--warn); font-size: var(--font-12); line-height: 1.5; }
 .sync-banner .icon { flex: none; width: 14px; height: 14px; margin-top: 2px; }
 .recent-card { margin: 16px 0 12px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
@@ -64,14 +64,6 @@
 .recent-conf.pending { background: color-mix(in srgb, #e08a2b 14%, transparent); color: #c06d10; }
 .recent-empty { margin: 0; padding: 18px 0; color: var(--muted); font-size: var(--font-12); text-align: center; }
 .skeleton-row { margin: 4px 0; border-radius: 6px; background: var(--soft); min-height: 20px; }
-.inline-links { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; margin: 0 0 16px; }
-.inline-link { display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%; min-width: 0; min-height: 32px; padding: 4px 6px; border: 0; background: transparent; color: var(--muted); font-size: var(--font-12); font-weight: 400; }
-.inline-link:hover { background: transparent; }
-.inline-link .icon { flex: none; width: 14px; height: 14px; color: var(--blue-text); }
-.inline-link-title { flex: none; color: var(--blue-text); }
-.inline-link-dot { flex: none; opacity: .5; }
-.inline-link-note { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.inline-link .inline-link-chevron { width: 11px; height: 11px; color: var(--muted); transform: rotate(-90deg); }
 /* The iOS send screen's inline checks. */
 .field-error { display: block; margin: -6px 0 10px; color: var(--red); font-size: var(--font-12); line-height: 1.45; }
 .field-note { display: block; margin: -6px 0 10px; color: var(--muted); font-size: var(--font-12); }
@@ -106,8 +98,6 @@
 .recover-dest { display: grid; gap: 6px; margin: 0; padding: 0; border: 0; }
 .recover-dest legend { margin-bottom: 4px; color: var(--muted); font-size: var(--font-12); }
 .recover-dest label { display: flex; align-items: center; gap: 8px; }
-.donation-badge { display: block; width: fit-content; margin: 0 auto 12px; padding: 5px 10px; border-radius: 999px; background: var(--soft); color: var(--blue-text); font-size: var(--font-12); font-weight: 600; }
-.donation-explanation { color: var(--muted); font-size: var(--font-13); line-height: 1.6; text-align: center; }
 button.recent-row { width: 100%; border: 0; border-radius: 0; background: transparent; text-align: start; }
 .android-update { display: flex; align-items: center; gap: 4px; margin-bottom: 12px; padding: 8px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
 .android-update-open { flex: 1; min-width: 0; padding: 4px; border: 0; background: transparent; gap: 8px; text-align: start; }

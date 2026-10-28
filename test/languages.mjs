@@ -72,7 +72,7 @@ try {
     assert.equal(await page.locator('.receive code').textContent(),vectors.addresses[0]);await fits(`${l}: receive`);await button(l,'关闭').click();
     await button(l,'↑ 转账').click();await page.getByLabel(texts[l]['地址簿'],{exact:true}).selectOption(vectors.cases[0].to);
     await page.getByLabel(texts[l]['转账金额'],{exact:true}).fill('1');await button(l,'预览转账').click();await page.getByRole('button',{name:texts[l]['确认发送 {amount} PRL'].replace('{amount}','1'),exact:true}).waitFor();await fits(`${l}: review`);
-    assert.ok((await page.locator('dialog').innerText()).includes(texts[l]['预览在 3 分钟后失效。确认时在本机签名，再发送已签名交易。']));
+    assert.ok((await page.locator('dialog').innerText()).includes(texts[l]['在本机签名，上链后不可撤销']));
     if(l==='ru')await page.screenshot({path:`${output}/extension-ru-send-320.png`,fullPage:true});
     await button(l,'关闭').click();
     await button(l,'支持开发者').click();

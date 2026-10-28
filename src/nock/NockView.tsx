@@ -13,6 +13,7 @@ import { loadNockPrice } from "./price.ts";
 import { CLI_NODE_PERMISSION } from "./nodes.ts";
 import type { NockView, PreparedView } from "./service.ts";
 import type { NockText } from "./errors.ts";
+import { InfoTip } from "../InfoTip.tsx";
 
 type Rpc = <T>(command: string, data?: Record<string, unknown>) => Promise<T>;
 type Common = { lang: Lang; rpc: Rpc; walletId: string; secondary: string; rates?: Record<string, number> };
@@ -39,7 +40,7 @@ export const NockBadge = ({ muted = false, size = "" }: { muted?: boolean; size?
 /// Where NOCK shows on the wallet page. A wallet that uses NOCK gets the strip (`slot` "strip"), with its
 /// balance, kept fresh only while it is on screen; any other only the quiet link at the very bottom
 /// (`slot` "link"), which reads nothing from the network.
-export function NockEntry({ lang, rpc, walletId, secondary, rates, slot, onOpen }: Common & { slot: "strip" | "link"; onOpen: () => void }) {
+export function NockEntry({ lang, rpc, walletId, secondary, rates, slot, onOpen, onClose }: Common & { slot: "strip" | "link"; onOpen: () => void; onClose?: () => void }) {
   const { t, nock } = useText(lang);
   const [status, setStatus] = useState<NockView | null>(null), [usd, setUsd] = useState<number>();
   useEffect(() => {
@@ -59,7 +60,11 @@ export function NockEntry({ lang, rpc, walletId, secondary, rates, slot, onOpen 
     return () => { live = false; clearTimeout(timer); };
   }, [walletId, slot]);
   if (!status) return null;
-  if (slot === "link") return status.inUse ? null : <button className="nock-link" onClick={onOpen}><NockBadge size="small" /><span className="nock-link-name">{t("NOCK 钱包")}</span><Icon name="chevron" className="nock-chevron" /></button>;
+  // A row of the wallet page's shortcut card (iOS NockInlineLink): the × before the chevron closes the line.
+  if (slot === "link") return status.inUse ? null : <div className="shortcut-row nock-link">
+    <button className="shortcut-open" onClick={onOpen}><Icon name="hexagon" /><span className="shortcut-title">{t("NOCK 钱包")}</span>{onClose && <span className="shortcut-slot" />}<Icon name="chevron" className="shortcut-chevron" /></button>
+    {onClose && <button className="shortcut-close" aria-label={`${t("关闭")} · ${t("NOCK 钱包")}`} title={t("关闭")} onClick={onClose}><Icon name="close" /></button>}
+  </div>;
   if (!status.inUse) return null;
   const total = status.balance.total;
   return <button className="nock-strip" aria-label={status.hasBalance ? t("NOCK 余额 {amount}", { amount: nock(total) }) : t("NOCK 钱包")} onClick={onOpen}>
@@ -239,16 +244,16 @@ export function NockPage({ lang, rpc, walletId, secondary, rates, copy, onBack, 
       <div className="nock-recent-head"><span>{t("最近交易")}</span>{status.history.length > 0 && <button className="text-button" onClick={() => setPanel("history")}>{t("全部交易")}</button>}</div>
       {!status.history.length ? <p className="nock-recent-empty">{status.backendReady ? t("暂无交易记录") : problemLine || t("同步中…")}</p> : status.history.slice(0, 3).map(row)}
     </section>
-    <footer className="nock-seed-note"><span><Icon name="key" />{t("和 PRL 共用助记词")}</span><small>{t("用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。")}</small></footer>
+    {/* One quiet caption line on this deliberately quiet page; the detail sits in the ⓘ (iOS 6a1e720). */}
+    <footer className="nock-seed-note"><span><Icon name="key" />{t("和 PRL 共用助记词")}</span><InfoTip label={t("和 PRL 共用助记词")} title={t("和 PRL 共用助记词")} text={t("用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。")} /></footer>
 
     <dialog ref={dialog} className="nock-dialog" onCancel={(e) => { e.preventDefault(); if (!sending) closePanel(); }} onClick={(e) => { if (e.target === dialog.current && !sending && !preparing) closePanel(); }}><div className="dialog-inner">
       <div className="dialog-title"><h2>{panel === "history" ? t("NOCK 记录") : panel === "receive" ? t("收 NOCK") : panel === "send" ? prepared ? t("确认转账") : t("转 NOCK") : t("交易详情")}</h2><button className="icon-button" aria-label={t("关闭")} disabled={sending} onClick={closePanel}><Icon name="close" /></button></div>
-      {panel === "history" && <section className="nock-history">{status.history.length ? status.history.map(row) : <p className="empty">{t("暂无交易记录")}</p>}<small className="nock-footnote">{t("记录从区块浏览器 nockscan.com 读取，换设备或重装后也能看到。")}</small></section>}
+      {panel === "history" && <section className="nock-history">{status.history.length ? status.history.map(row) : <p className="empty">{t("暂无交易记录")}</p>}</section>}
 
       {panel === "receive" && <div className="receive">
-        {status.address ? <><QR value={status.address} alt={t("NOCK 收款地址 · Nockchain 主网")} /><p className="nock-receive-label">{t("NOCK 收款地址 · Nockchain 主网")}</p><code>{status.address}</code>
-          <button className="primary wide" onClick={() => copy(status.address!)}><Icon name="copy" />{t("复制地址")}</button>
-          <p>{t("这个地址只收 NOCK，别往这里转 PRL。")}</p></> : <p>{t("派生地址…")}</p>}
+        {status.address ? <><QR value={status.address} alt={t("NOCK 收款地址 · Nockchain 主网")} /><p className="nock-receive-label">{t("NOCK 收款地址 · Nockchain 主网")}<InfoTip label={t("说明")} text={t("这个地址只收 NOCK，别往这里转 PRL。")} /></p><code>{status.address}</code>
+          <button className="primary wide" onClick={() => copy(status.address!)}><Icon name="copy" />{t("复制地址")}</button></> : <p>{t("派生地址…")}</p>}
       </div>}
 
       {panel === "send" && !prepared && <form onSubmit={(e) => { e.preventDefault(); void prepare(); }}>
@@ -260,7 +265,6 @@ export function NockPage({ lang, rpc, walletId, secondary, rates, copy, onBack, 
         {status.offerSecondNode && <SecondNodeOffer t={t} onAllowed={() => void refresh()} />}
         <button className="primary wide" disabled={!canSend}>{preparing ? t("正在构建交易…") : t("发送")}<Icon name="send" /></button>
         {result && <p className={result.warning ? "fee-warning" : "field-note error"} role="alert">{result.warning && <Icon name="warning" />}<span>{result.text}</span></p>}
-        <p className="receipt-info"><Icon name="shield" /><span>{t("交易在本机签名（私钥不离开设备），经 Nockchain 公共节点广播。手续费按交易大小计算，确认前会显示。")}</span></p>
       </form>}
 
       {panel === "send" && prepared && <form onSubmit={(e) => { e.preventDefault(); if (android) secret(t("确认转账"), (s) => void send(prepared, s)); else void send(prepared, password); }}>

@@ -132,5 +132,9 @@ export async function accountFixture(worker, contacts = []) {
 }
 export async function fits(page, label) {
   const dimensions = await page.evaluate(() => ({ width: innerWidth, page: document.documentElement.scrollWidth, dialog: [...document.querySelectorAll("dialog[open]")].every((d) => d.scrollWidth <= d.clientWidth) }));
-  if (dimensions.page > dimensions.width || !dimensions.dialog) throw new Error(`${label}: horizontal overflow ${JSON.stringify(dimensions)}`);
+  if (dimensions.page > dimensions.width || !dimensions.dialog) {
+    // Name the widest offenders, so the failure says what to fix.
+    const wide = await page.evaluate(() => [...document.querySelectorAll("body *")].filter((e) => e.getBoundingClientRect().right > innerWidth + 0.5 && ![...e.children].some((c) => c.getBoundingClientRect().right > innerWidth + 0.5)).slice(0, 5).map((e) => { const box = e.closest("[class]:not(svg):not(path)") || e; return `${e.tagName.toLowerCase()} in ${box.tagName.toLowerCase()}.${[...box.classList].join(".")} "${(box.textContent || "").trim().slice(0, 40)}" right=${Math.round(e.getBoundingClientRect().right)}`; }));
+    throw new Error(`${label}: horizontal overflow ${JSON.stringify(dimensions)} ${wide.join(" | ")}`);
+  }
 }

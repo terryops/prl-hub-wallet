@@ -127,6 +127,35 @@ export function mergeUTXOs(groups: UTXO[][]): UTXO[] {
   }
   return [...result.values()];
 }
+/// History rows as seen from the addresses in `mine` (lower case).
+export function historyRows(txs: ChainTx[], mine: ReadonlySet<string>): Snapshot["history"] {
+  const ownValue = (rows: IO[]) => rows.reduce((sum, io) => sum + ((io.addresses || []).some((a) => mine.has(a.toLowerCase())) ? BigInt(io.value || "0") : 0n), 0n);
+  return txs.map((tx) => {
+    const peer = transactionPeer(tx, mine), received = ownValue(tx.vout || []), spent = ownValue(tx.vin || []);
+    // A send that also spends other people's coins (a joint transaction or a sweep) pays them more than
+    // left this wallet: show what went to others, capped at this wallet's own net loss. Same rule as
+    // pearlhub.net's watch wallet since 2026-10-26 (prl-hub alerts/src/chain.js).
+    const paid = peer.sent ? (tx.vout || []).filter((io) => !(io.addresses || []).some((a) => mine.has(a.toLowerCase()))).reduce((n, io) => n + BigInt(io.value || "0"), 0n) : 0n;
+    const lost = spent > received ? spent - received : 0n;
+    return { txid: tx.txid, time: tx.blockTime || 0, confirmations: tx.confirmations || 0, delta: (received - spent).toString(), amount: (peer.sent ? (lost > 0n && lost < paid ? lost : paid) : received).toString(), fee: tx.fees || "0", ...peer };
+  }).sort((a, b) => b.time - a.time);
+}
+/// A read-only wallet's refresh (iOS BlockbookClient.account(address:)): balance and one history page of the
+/// one address it watches, from Blockbook's /address/ (same balance fields as /xpub/). No keys, UTXOs or
+/// change chain: `balance` is the confirmed part and `pending` the unconfirmed one, which a spend makes negative.
+export async function loadWatch(address: string, network: Network, walletId: string, page = 1, options: { active?: () => void; bases?: string[] } = {}): Promise<Snapshot> {
+  options.active?.();
+  const { data, base } = await requestFrom<Account>(options.bases ?? indexers(network), `/api/v2/address/${address}?details=txs&page=${page}&pageSize=10`);
+  options.active?.();
+  if (!/^\d+$/.test(data.balance) || !/^-?\d+$/.test(data.unconfirmedBalance || "0")) throw new Error("链上余额数据无效。");
+  const pages = data.totalPages || 1;
+  if (!Number.isSafeInteger(pages) || pages < 1) throw new Error("链上余额数据无效。");
+  return {
+    network, walletId, utxos: [], balance: data.balance, pending: data.unconfirmedBalance || "0",
+    history: historyRows(data.transactions || [], new Set([address.toLowerCase()])),
+    page, hasMore: page < pages, changeAddresses: [], time: Date.now(), indexer: base,
+  };
+}
 export async function loadAccount(publicKey: string, network: Network, walletId: string, knownChange: string[], page = 1, scan = false, options: { paths?: Record<string, string>; fromHeight?: number; active?: () => void; bases?: string[] } = {}): Promise<Snapshot> {
   for (const [address, path] of Object.entries(options.paths || {})) registerAddressPath(publicKey, network, address, path);
   const mine = addressMap(publicKey, network), changes = new Set(knownChange.filter((a) => mine.get(a)?.branch === 1));
@@ -220,20 +249,11 @@ export async function loadAccount(publicKey: string, network: Network, walletId:
   // Used xpub tokens can exceed the supported signing scan. They are still ours
   // for history display; recognizing them does not widen the signing key range.
   const historyMine = new Set([...mine.keys(), ...(first.tokens || []).flatMap((token) => typeof token.name === "string" && isAddress(token.name.toLowerCase(), network) ? [token.name.toLowerCase()] : [])]);
-  const ownValue = (rows: IO[]) => rows.reduce((sum, io) => sum + ((io.addresses || []).some((a) => historyMine.has(a.toLowerCase())) ? BigInt(io.value || "0") : 0n), 0n);
   return {
     network, walletId, utxos,
     balance: utxos.filter((u) => (u.confirmations || 0) > 0).reduce((s, u) => s + BigInt(u.value), 0n).toString(),
     pending: utxos.filter((u) => !u.confirmations).reduce((s, u) => s + BigInt(u.value), 0n).toString(),
-    history: [...allTxs.values()].map((tx) => {
-      const peer = transactionPeer(tx, historyMine), received = ownValue(tx.vout || []), spent = ownValue(tx.vin || []);
-      // A send that also spends other people's coins (a joint transaction or a sweep) pays them more than
-      // left this wallet: show what went to others, capped at this wallet's own net loss. Same rule as
-      // pearlhub.net's watch wallet since 2026-10-26 (prl-hub alerts/src/chain.js).
-      const paid = peer.sent ? (tx.vout || []).filter((io) => !(io.addresses || []).some((a) => historyMine.has(a.toLowerCase()))).reduce((n, io) => n + BigInt(io.value || "0"), 0n) : 0n;
-      const lost = spent > received ? spent - received : 0n;
-      return { txid: tx.txid, time: tx.blockTime || 0, confirmations: tx.confirmations || 0, delta: (received - spent).toString(), amount: (peer.sent ? (lost > 0n && lost < paid ? lost : paid) : received).toString(), fee: tx.fees || "0", ...peer };
-    }).sort((a, b) => b.time - a.time),
+    history: historyRows([...allTxs.values()], historyMine),
     page, hasMore: page < (first.totalPages || 1), changeAddresses: [...changes], addressPaths: Object.fromEntries([...mine].filter(([a, d]) => d.index >= 200 && (changes.has(a) || utxos.some((u) => u.address === a))).map(([a, d]) => [a, `${accountPath(network)}/${d.branch}/${d.index}`])),
     // reduce, not Math.max(...spent): a full scan can return more transactions than a call accepts as arguments.
     scanHeight: spent.reduce((height, tx) => (tx.confirmations || 0) > 0 ? Math.max(height, tx.blockHeight || 0) : height, options.fromHeight || 0), time: Date.now(), indexer: at[0]

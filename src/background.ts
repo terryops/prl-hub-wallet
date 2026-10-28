@@ -1,8 +1,9 @@
 import { createVault, keyFromPassword, open, seal, bytes64, type Envelope } from "./vault.ts";
-import { checkedMnemonic, newMnemonic, xpub, derived, addressMap, parseAmount, planTransaction, signTransaction, maxAmount, outpoint, type Network, type VaultData, type Pending, type Wallet } from "./wallet.ts";
-import { loadAccount, estimateFee, indexers, indexerHeaders, pinned, txCopies, alreadyKnown, OWN_MAINNET, type Snapshot } from "./chain.ts";
+import { checkedMnemonic, newMnemonic, xpub, derived, addressMap, parseAmount, planTransaction, signTransaction, maxAmount, outpoint, isAddress, type Network, type VaultData, type Pending, type Wallet } from "./wallet.ts";
+import { loadAccount, loadWatch, estimateFee, indexers, indexerHeaders, pinned, txCopies, alreadyKnown, OWN_MAINNET, type Snapshot } from "./chain.ts";
 import { txDetail, rawTxid, type TxDetail } from "./transactions.ts";
 import { CONTACTS, saveContact, removeContact } from "./contacts.ts";
+import { applyWebWallets, supersede, watchName, webRows } from "./watch.ts";
 import { DONATION_ADDRESS, canDonate, donationAmount } from "./donation.ts";
 import { CONTACT_LINK, syncContacts } from "./contact-sync.ts";
 import { accountState, loginAccount, logoutAccount } from "./account.ts";
@@ -63,7 +64,12 @@ async function status() {
     const snapshot = (await chrome.storage.session.get(SNAPSHOT))[SNAPSHOT] as Snapshot | undefined;
     assertEpoch(epoch);
     return { exists, locked: false, network: data.network, selected: data.selected,
-      wallets: data.wallets.map((w) => { const key = xpub(w.mnemonic, data.network); return { id: w.id, name: w.name, index: w.receiveIndex, primaryAddress: derived(key, data.network, 0, 0).address, address: derived(key, data.network, 0, w.receiveIndex).address }; }),
+      wallets: data.wallets.map((w) => {
+        // A read-only wallet shows the one address it watches (even on the other network, where it reads nothing).
+        if (w.watch) return { id: w.id, name: w.name, index: 0, primaryAddress: w.watch, address: w.watch, watch: true };
+        const key = xpub(w.mnemonic, data.network);
+        return { id: w.id, name: w.name, index: w.receiveIndex, primaryAddress: derived(key, data.network, 0, 0).address, address: derived(key, data.network, 0, w.receiveIndex).address };
+      }),
       pending: data.pending.filter((p) => p.walletId === data.selected && p.network === data.network).map(({ hex: _hex, inputs: _inputs, ...p }) => p),
       snapshot: snapshot?.walletId === data.selected && snapshot.network === data.network ? snapshot : undefined };
   } catch { return { exists, locked: true }; }
@@ -75,6 +81,15 @@ async function refresh(page = 1, scan = false) {
   const previous = prior?.walletId === w.id && prior.network === data.network ? prior : undefined;
   // 加载更多 reads from the index page 1 came from, so the pages can't straddle two indexes.
   const bases = page > 1 && previous?.indexer ? pinned(data.network, previous.indexer, true) : undefined;
+  if (w.watch) {
+    // Added on the other network: nothing to read here (the page says so).
+    if (!isAddress(w.watch, data.network)) throw new Error("watch-network");
+    const snapshot = await loadWatch(w.watch, data.network, w.id, page, { active: () => assertEpoch(epoch), bases });
+    const current = await loaded();
+    assertEpoch(epoch);
+    if (current.data.selected !== w.id || current.data.network !== data.network) throw new Error("钱包已切换，请刷新。");
+    return keepPages(snapshot, previous, page);
+  }
   const snapshot = await loadAccount(xpub(w.mnemonic, data.network), data.network, w.id, w.changeAddresses?.[data.network] || [], page, scan, { paths: w.addressPaths?.[data.network], fromHeight: w.scanHeight?.[data.network], active: () => assertEpoch(epoch), bases });
   const current = await loaded();
   assertEpoch(epoch);
@@ -97,6 +112,10 @@ async function refresh(page = 1, scan = false) {
   current.data.pending = current.data.pending.filter(p => !confirmed.has(p));
   await save(current.data);
   assertEpoch(epoch);
+  return keepPages(snapshot, previous, page);
+}
+/// Saves a refresh's snapshot, keeping the pages 加载更多 already loaded where that is safe.
+async function keepPages(snapshot: Snapshot, previous: Snapshot | undefined, page: number) {
   // Older pages are kept only from the same index (see above).
   const same = !!previous && previous.indexer === snapshot.indexer;
   // A page-1 refresh keeps the older pages loaded with 加载更多 only while its first page still reaches a
@@ -172,6 +191,7 @@ async function broadcast(p: Pending) {
 /// The open wallet's addresses this extension knows: the derived ones it signs for, change found on the
 /// internal chain, and addresses registered from the indexer's derivation paths.
 function ownAddresses(w: Wallet, network: Network) {
+  if (w.watch) return new Set([w.watch]);
   const own = new Set(addressMap(xpub(w.mnemonic, network), network).keys());
   for (const a of w.changeAddresses?.[network] || []) own.add(a.toLowerCase());
   for (const a of Object.keys(w.addressPaths?.[network] || {})) own.add(a.toLowerCase());
@@ -218,6 +238,38 @@ async function handle(m: Message, epoch: number) {
     } finally { key.fill(0); }
     return status();
   }
+  // 添加只读钱包 (iOS commitWatchWallet): just an address on the current network, no seed. It needs the
+  // wallet unlocked, or, as the first wallet, a new vault like 创建钱包's.
+  if (m.command === "watch-add") {
+    const e = await envelope();
+    let data: VaultData;
+    if (e) data = (await loaded()).data;
+    else data = { wallets: [], selected: "", network: "mainnet", pending: [] };
+    const addr = text(m.address).trim().toLowerCase();
+    if (!isAddress(addr, data.network)) throw new Error("watch-address");
+    // An address some wallet here already shows just switches to that wallet.
+    const existing = data.wallets.find((w) => w.watch === addr || !w.watch && derived(xpub(w.mnemonic, data.network), data.network, 0, 0).address === addr);
+    if (existing) {
+      if (data.selected !== existing.id) { data.selected = existing.id; await save(data); await chrome.storage.session.remove([SNAPSHOT, REVIEW]); }
+      return { ...await status(), existing: existing.name };
+    }
+    if (data.wallets.length >= 10) throw new Error("最多管理 10 个钱包。");
+    const id = crypto.randomUUID();
+    data.wallets.push({ id, name: text(m.name).trim().slice(0, 40) || watchName(data), mnemonic: "", receiveIndex: 0, watch: addr });
+    data.selected = id;
+    stillActive();
+    if (e) await save(data);
+    else {
+      const { envelope: next, key } = await createVault(data, text(m.password));
+      try {
+        stillActive();
+        await chrome.storage.local.set({ [VAULT]: next });
+        stillActive();
+        await chrome.storage.session.set({ [SESSION]: { key: bytes64.encode(key), active: Date.now() } });
+      } finally { key.fill(0); }
+    }
+    await chrome.storage.session.remove([SNAPSHOT, REVIEW]); return status();
+  }
   if (m.command === "create") {
     const mnemonic = checkedMnemonic(text(m.mnemonic)), name = text(m.name).trim().slice(0, 40) || "我的钱包";
     const e = await envelope();
@@ -226,7 +278,9 @@ async function handle(m: Message, epoch: number) {
     else data = { wallets: [], selected: "", network: "mainnet", pending: [] };
     if (data.wallets.length >= 10) throw new Error("最多管理 10 个钱包。");
     if (data.wallets.some((w) => w.mnemonic === mnemonic)) throw new Error("这个钱包已经添加。");
-    const id = crypto.randomUUID(); data.wallets.push({ id, name, mnemonic, receiveIndex: 0 }); data.selected = id;
+    const id = crypto.randomUUID(), added: Wallet = { id, name, mnemonic, receiveIndex: 0 };
+    data.wallets.push(added); data.selected = id;
+    supersede(data, added);
     stillActive();
     if (e) await save(data);
     else {
@@ -245,9 +299,30 @@ async function handle(m: Message, epoch: number) {
       (m.expectedNetwork !== undefined && m.expectedNetwork !== data.network))
     throw new Error("钱包或网络已切换，请重新操作。");
   if (m.command === "contact-sync") return syncContacts(stillActive);
+  // The account's web 钱包 page (Android: through the app page, shared/android-host.ts).
+  if (m.command === "web-rows") return webRows(data);
+  if (m.command === "watch-apply") {
+    const skipped: string[] = [];
+    if (!applyWebWallets(data, (m.changes || {}) as Parameters<typeof applyWebWallets>[1], skipped)) return { ...await status(), skipped };
+    stillActive();
+    if (!data.wallets.length) { await chrome.storage.local.remove(VAULT); await nockForgetAll(); return { ...await lock(), skipped }; }
+    await save(data); await chrome.storage.session.remove([SNAPSHOT, REVIEW]); return { ...await status(), skipped };
+  }
+  // 移除只读钱包: only the address leaves this device, so no password (iOS: a confirmation only).
+  if (m.command === "watch-remove") {
+    const target = data.wallets.find((x) => x.id === m.id);
+    if (!target?.watch) throw new Error("钱包不存在。");
+    data.wallets = data.wallets.filter((x) => x.id !== target.id);
+    if (!data.wallets.length) { await chrome.storage.local.remove(VAULT); await nockForgetAll(); return lock(); }
+    if (data.selected === target.id) { data.selected = data.wallets[0].id; await chrome.storage.session.remove([SNAPSHOT, REVIEW]); }
+    await save(data); return status();
+  }
+  // A read-only wallet has no keys: nothing that signs, derives or reveals a phrase works on it.
+  if (w.watch && (m.command.startsWith("nock-") || ["receive", "backup", "prepare", "send", "retry", "discard", "fee"].includes(m.command))) throw new Error("只读钱包不能转账");
   if (m.command.startsWith("nock-")) return nock(m, w, stillActive);
-  // Android home-screen widget: the public key and change addresses it refreshes the balance from.
-  if (ANDROID && m.command === "widget-keys") return { xpub: xpub(w.mnemonic, data.network), changeAddresses: w.changeAddresses?.[data.network] || [] };
+  // Android home-screen widget: the public key and change addresses it refreshes the balance from. A read-only
+  // wallet hands over its address instead (the widget reads either kind, like iOS WidgetFetch).
+  if (ANDROID && m.command === "widget-keys") return w.watch ? { xpub: w.watch, changeAddresses: [] } : { xpub: xpub(w.mnemonic, data.network), changeAddresses: w.changeAddresses?.[data.network] || [] };
   if (m.command === "contact-save" || m.command === "contact-remove") {
     const raw = (await chrome.storage.local.get(CONTACTS))[CONTACTS];
     const contacts = m.command === "contact-save"
