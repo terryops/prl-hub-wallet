@@ -1,4 +1,4 @@
-# Chrome 商店注册与提交清单（Pearl Hub Wallet 0.1.2 起，0.1.7 的改动见第八节，0.1.8 见第九节）
+# Chrome 商店注册与提交清单（Pearl Hub Wallet 0.1.2 起，0.1.7 的改动见第八节，0.1.8 见第九节，0.1.9 见第十节）
 
 按商店后台的顺序逐项填写。英文文案取自 `store/en.json`，其他语言取自对应的 `store/<语言>.json`。
 
@@ -156,3 +156,9 @@ node scripts/store-release.mjs submit --staged   # 审核通过后先暂存，�
 顺序同 0.1.7：`npm run store:upload` 传草稿 → 后台改详细说明并 Save draft → `npm run store:publish` 提交审核。
 
 **已完成（2026-10-27）**：`store:upload` 传了 0.1.8 草稿（含 eeead3a 的「全部」修正，第一次上传的 9dd2363 包被覆盖）；后台 16 种语言的详细说明逐个换成 `store/<语言>.json`，每种语言改前先确认后台原文就是 v0.1.7 的 `store/*.json`，改完 Save draft，重新加载后 16 种逐字核对一致（脚本在忽略的 `out/store-0.1.8/edit.mjs`）。隐私政策 https://pearlhub.net/privacy 已先上线（prl-hub-web wallet-018 发布，Worker 版本 ff74d7f3）。然后 `npm run store:publish` 提交审核，状态 PENDING_REVIEW 0.1.8，通过后自动发布。后台登录过期时，独立 Chrome 资料要发布者本人重新登录。
+
+## 十、0.1.9：只读钱包、ⓘ 说明
+
+清单的权限、主机权限、CSP 都没有变化。只读钱包按地址查询同一个区块索引（已在「财务和付款信息」与隐私政策里），插件里的只读钱包只存在本机、不同步，所以 Privacy practices、隐私政策、Test instructions 都不用改；详细说明也没有改。
+
+**已完成（2026-10-28）**：0.1.8 还在审核中（10-27 提交），所有者决定直接发 0.1.9：用 API `:cancelSubmission` 撤回 0.1.8 的审核（状态 CANCELLED，在架仍是 0.1.7），随即 `npm run store:submit` 上传并提交 0.1.9（d4e99dd，商店包 SHA-256 `f6fc7a70…`），状态 PENDING_REVIEW 0.1.9，通过后自动发布。GitHub Release v0.1.9 的 ZIP SHA-256 `1b119d2d…`。0.1.9 包含 0.1.8 的全部改动。
