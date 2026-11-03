@@ -365,5 +365,7 @@
   "钱包页不再显示 NOCK 钱包，之后可以在「钱包设置」重新打开。": "Billetera NOCK dejará de mostrarse en la página de la billetera. Puedes volver a activarla en Configuración de billetera.",
   "在钱包页显示 NOCK 钱包": "Mostrar Billetera NOCK en la página de la billetera",
   "请离线手抄，切勿截图、拍照或复制——任何人拿到它都能转走你的资产。": "Anótala a mano, sin conexión; nunca hagas capturas de pantalla ni fotos de ella, ni la copies: cualquiera que la obtenga puede transferir tus activos.",
-  "Pearl Hub 是开源项目，全部代码公开在 GitHub，没有广告和追踪。基础功能一直免费，捐赠和高级版的收入用来支付服务器和节点费用、维持更新。": "Pearl Hub es de código abierto: todo su código es público en GitHub, sin anuncios ni rastreo. Las funciones básicas siguen siendo gratuitas; las donaciones y las compras de Pro pagan los servidores y nodos y lo mantienen actualizado."
+  "Pearl Hub 是开源项目，全部代码公开在 GitHub，没有广告和追踪。基础功能一直免费，捐赠和高级版的收入用来支付服务器和节点费用、维持更新。": "Pearl Hub es de código abierto: todo su código es público en GitHub, sin anuncios ni rastreo. Las funciones básicas siguen siendo gratuitas; las donaciones y las compras de Pro pagan los servidores y nodos y lo mantienen actualizado.",
+  "已复制": "Copiado",
+  "分享": "Compartir"
 }

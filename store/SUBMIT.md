@@ -1,4 +1,4 @@
-# Chrome 商店注册与提交清单（Pearl Hub Wallet 0.1.2 起，0.1.7 的改动见第八节，0.1.8 见第九节，0.1.9 见第十节）
+# Chrome 商店注册与提交清单（Pearl Hub Wallet 0.1.2 起，0.1.7 的改动见第八节，0.1.8 见第九节，0.1.9 见第十节，0.1.10 见第十一节）
 
 按商店后台的顺序逐项填写。英文文案取自 `store/en.json`，其他语言取自对应的 `store/<语言>.json`。
 
@@ -162,3 +162,7 @@ node scripts/store-release.mjs submit --staged   # 审核通过后先暂存，�
 清单的权限、主机权限、CSP 都没有变化。只读钱包按地址查询同一个区块索引（已在「财务和付款信息」与隐私政策里），插件里的只读钱包只存在本机、不同步，所以 Privacy practices、隐私政策、Test instructions 都不用改；详细说明也没有改。
 
 **已完成（2026-10-28）**：0.1.8 还在审核中（10-27 提交），所有者决定直接发 0.1.9：用 API `:cancelSubmission` 撤回 0.1.8 的审核（状态 CANCELLED，在架仍是 0.1.7），随即 `npm run store:submit` 上传并提交 0.1.9（d4e99dd，商店包 SHA-256 `f6fc7a70…`），状态 PENDING_REVIEW 0.1.9，通过后自动发布。GitHub Release v0.1.9 的 ZIP SHA-256 `1b119d2d…`。0.1.9 包含 0.1.8 的全部改动。
+
+## 十一、0.1.10：收 NOCK 卡片、汇率一天一次
+
+清单只改了版本号，权限、主机权限、CSP 都没有变化。「分享」用浏览器自带的 `navigator.share`，不需要权限。汇率表缓存在插件自己的 `localStorage` 里，是公开数据，不含地址或身份，请求仍是同一个 `pearlhub.net/v1/fx`（只是一天一次），所以 Privacy practices、隐私政策、Test instructions、详细说明都不用改，直接 `npm run store:submit`。

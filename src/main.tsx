@@ -18,6 +18,7 @@ import { TxDetailView, type TxLoad, type TxResend } from "./TxDetail.tsx";
 import { SendReceipt } from "./SendReceipt.tsx";
 import { UpdateBanner, useAndroidUpdate } from "./android/UpdateBanner.tsx";
 import { NockEntry, NockPage } from "./nock/NockView.tsx";
+import { loadNockEnabled, saveNockEnabled, NOCK_ENABLED, NOCK_LINK_HIDDEN } from "./nock/enabled.ts";
 import { InfoTip } from "./InfoTip.tsx";
 import { receiptAmount } from "./receipt.ts";
 import { parseTxid } from "./transactions.ts";
@@ -33,7 +34,12 @@ type WalletInfo = { id: string; name: string; index: number; address: string; pr
 type View = { exists: boolean; locked: boolean; network?: Network; selected?: string; wallets?: WalletInfo[]; pending?: Omit<Pending, "hex" | "inputs">[]; snapshot?: Snapshot };
 type Review = { id: string; to: string; network: Network; amount: string; fee: string; change: string; changeAddress: string; expires: number; donation?: boolean };
 // watch: 添加只读钱包; watchSend: 转账 on a read-only wallet; watchRemove: 移除只读钱包; nockClose: closing the NOCK line.
-type Panel = "create" | "restore" | "receive" | "send" | "settings" | "wallets" | "backup" | "retry" | "discard" | "contact" | "donate" | "security" | "tx" | "lookup" | "recover" | "watch" | "watchSend" | "watchRemove" | "nockClose" | null;
+// Android only (iOS WalletSwitcher.swift): add = 添加钱包, manage = 管理钱包.
+type Panel = "create" | "restore" | "receive" | "send" | "settings" | "wallets" | "backup" | "retry" | "discard" | "contact" | "donate" | "security" | "tx" | "lookup" | "recover" | "watch" | "watchSend" | "watchRemove" | "nockClose" | "add" | "manage" | null;
+// The Android add flow: 添加钱包 and what it opens. Closing any of them returns to 管理钱包 when the flow began there.
+const ADD_FLOW: Panel[] = ["add", "create", "restore", "watch"];
+// iOS shortAddr.
+const shortAddr = (a: string) => a.length > 16 ? `${a.slice(0, 10)}…${a.slice(-6)}` : a;
 type ContactLink = { connected: boolean; userId?: string; email?: string; pro?: boolean; lastSync?: number };
 type Message = string | { text: string } | { account: "failed" | "expired" } | { android: "needLock" | "lockout" | "secretMissing" | "authFailed" };
 async function rpc<T>(command: string, data: Record<string, unknown> = {}): Promise<T> {
@@ -55,11 +61,10 @@ function balanceParts(value: string, locale: string) {
 }
 const DONATION_PROMPTED = "donate.prompted";
 const BALANCE = "android.lastBalance";
-const NOCK_LINK_HIDDEN = "nock.linkHidden";
 // iOS strings with positional slots ({0}, {1}) from extension/src/android/copy.json.
 const fill = (template: string, ...values: (string | number)[]) => template.replace(/\{(\d)\}/g, (_, i) => String(values[Number(i)] ?? ""));
 const FEE_RESERVE = 100_000n;        // iOS WalletStore.sendFeeReserve: 0.001 PRL
-// iOS VerifyStep: three random positions in order, each with the right word and three others from the phrase.
+// iOS VerifyStep: three random positions in order, each with the right word and two others from the phrase.
 function makeQuiz(words: string[]) {
   const pick = <T,>(xs: T[]) => xs[crypto.getRandomValues(new Uint32Array(1))[0] % xs.length];
   const positions: number[] = [];
@@ -67,7 +72,7 @@ function makeQuiz(words: string[]) {
   positions.sort((a, b) => a - b);
   const options = positions.map((i) => {
     const set = new Set([words[i]]);
-    for (let guard = 0; set.size < 4 && guard < 60; guard++) set.add(pick(words));
+    for (let guard = 0; set.size < 3 && guard < 100; guard++) set.add(pick(words));
     return [...set].sort(() => crypto.getRandomValues(new Uint32Array(1))[0] / 2 ** 32 - 0.5);
   });
   return { positions, options, chosen: {} as Record<number, string> };
@@ -189,10 +194,32 @@ function App() {
     : t("这个只读钱包的地址不属于 {network} 网络", { network: (viewRef.current?.network || "mainnet") === "mainnet" ? "Mainnet" : "Testnet" }) });
   // 添加只读钱包 (iOS WatchWalletView): a name and the address, on the current network.
   const [watchAddress, setWatchAddress] = useState("");
-  // The read-only wallet 移除只读钱包 is about (any wallet in the Android list, else the selected one).
+  // The read-only wallet 移除只读钱包 is about (the extension's settings).
   const [watchTarget, setWatchTarget] = useState<WalletInfo | null>(null);
-  const clearSecrets = () => { feeRequest.current++; setPassword(""); setRepeat(""); setNextPassword(""); setMnemonic(""); setReview(null); setQuiz(false); setQuizPick(null); };
-  const close = () => { setPanel(null); clearSecrets(); };
+  // Android, as the iOS app (Onboarding.swift, WalletSwitcher.swift): 创建钱包's three steps (a name; the phrase,
+  // generated only then; the check), the panels the add flow was opened over (comma-separated: back and close
+  // return there), the switcher's menu, a 管理钱包 row's menu (its wallet id), and its 重命名 / 移除 alerts.
+  const [createStep, setCreateStep] = useState<"name" | "phrase" | "verify">("name");
+  const [quizWrong, setQuizWrong] = useState(false);
+  const [trail, setTrail] = useState("");
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [rowMenu, setRowMenu] = useState("");
+  const [walletAlert, setWalletAlert] = useState<{ kind: "rename" | "remove"; wallet: WalletInfo } | null>(null);
+  const [renameText, setRenameText] = useState("");
+  const alertDialog = useRef<HTMLDialogElement>(null);
+  // A status to show on the panel the add flow returns to (opening a panel clears the old one).
+  const carried = useRef<Message | null>(null);
+  const parents = (trail ? trail.split(",") : []) as Exclude<Panel, null>[];
+  const clearSecrets = () => { feeRequest.current++; setPassword(""); setRepeat(""); setNextPassword(""); setMnemonic(""); setReview(null); setQuiz(false); setQuizPick(null); setCreateStep("name"); setQuizWrong(false); };
+  const close = () => { setPanel(null); clearSecrets(); setTrail(""); setSwitcherOpen(false); setRowMenu(""); setWalletAlert(null); };
+  // Android: the panel under this one (× and the system back return there), and the end of the add flow (×, or a
+  // wallet saved): back to 管理钱包 when it began there, as iOS's add sheet closes over it.
+  function popPanel() { const parent = parents.at(-1); if (!parent) { close(); return; } clearSecrets(); setTrail(parents.slice(0, -1).join(",")); setPanel(parent); }
+  function dismissFlow(note: Message | null = null) {
+    if (parents[0] !== "manage") { close(); if (note) setMessage(note); return; }
+    carried.current = note; clearSecrets(); setTrail(""); setPanel("manage");
+  }
+  const dismiss = () => { if (ANDROID && ADD_FLOW.includes(panel)) dismissFlow(); else close(); };
   async function act<T = View>(command: string, data: Record<string, unknown> = {}, after?: (result: T) => void) {
     if (running.current) { setMessage("更新中…"); return; }
     running.current = true; setBusy(true); setMessage("");
@@ -263,7 +290,8 @@ function App() {
   // The periodic sync skips while another action runs and stays silent: it neither blocks clicks with
   // "更新中…" nor clears a status the user is reading. Only an expired sign-in is reported.
   useEffect(() => { if (!contactLink.connected || view?.locked) return; const timer = setInterval(() => { if (document.visibilityState === "visible" && !running.current) void rpc<ContactLink>("contact-sync").then(setContactLink).catch((e: Error) => { if (/^(account_required|unauthorized|refresh_revoked)$/.test(e.message)) setMessage({ account: "expired" }); }); }, 60000); return () => clearInterval(timer); }, [contactLink.connected, view?.locked]);
-  useEffect(() => { close(); setChangeScan(""); }, [view?.selected, view?.network]);
+  // 管理钱包 stays open: switching is what its rows do (iOS ManageWalletsView).
+  useEffect(() => { if (!(ANDROID && panel === "manage")) close(); setChangeScan(""); }, [view?.selected, view?.network]);
   useEffect(() => {
     if (!view || view.locked || !view.selected || watchOff(view)) return;
     const timer = setTimeout(() => { void act("refresh"); }, 0);
@@ -272,24 +300,43 @@ function App() {
   useEffect(() => {
     // A status left on the main view (e.g. after a send) would otherwise reappear at the top of every dialog.
     // showModal() focuses the first control; a panel that starts with a field to type in (交易查询) asks for it instead.
-    if (panel) { setMessage(""); dialog.current?.showModal(); dialog.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus(); } else dialog.current?.close();
+    if (panel) { setMessage(carried.current || ""); carried.current = null; if (!dialog.current?.open) dialog.current?.showModal(); dialog.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus(); } else dialog.current?.close();
   }, [panel]);
+  // Android: 管理钱包's 重命名 / 移除 ask in an alert over whatever is open (iOS .alert); the switcher's menu and a row's
+  // menu close on a tap elsewhere or Esc.
+  useEffect(() => { if (walletAlert) { if (!alertDialog.current?.open) alertDialog.current?.showModal(); alertDialog.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus(); } else alertDialog.current?.close(); }, [walletAlert]);
+  useEffect(() => {
+    if (!ANDROID || !switcherOpen && !rowMenu) return;
+    const outside = (e: Event) => { if (!(e.target as Element | null)?.closest?.(".switcher-menu, #wallet-switcher, .row-menu, .manage-more")) { setSwitcherOpen(false); setRowMenu(""); } };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") { e.preventDefault(); setSwitcherOpen(false); setRowMenu(""); } };
+    document.addEventListener("pointerdown", outside); document.addEventListener("keydown", key);
+    return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", key); };
+  }, [switcherOpen, rowMenu]);
   useEffect(() => {
     let last = 0;
     const touch = () => { if (!view?.locked && Date.now() - last > 15000) { last = Date.now(); void rpc("touch").catch(() => {}); } };
     document.addEventListener("pointerdown", touch); document.addEventListener("keydown", touch);
     return () => { document.removeEventListener("pointerdown", touch); document.removeEventListener("keydown", touch); };
   }, [view?.locked]);
-  useEffect(() => {
-    // A dialog first, then the NOCK page's own dialog, then the NOCK page itself.
-    if (ANDROID) window.__pearlBack = () => { if (dialog.current?.open) { close(); return true; } if (nockBack.current?.()) return true; if (nockOpenRef.current) { setNockOpen(false); return true; } return false; };
-  }, []);
+  // The system back: an alert or menu first, then a dialog (a step of 创建钱包, then the panel under it, as iOS's 上一步
+  // and navigation back), then the NOCK page's own dialog, then the NOCK page itself.
+  const androidBack = useRef<() => boolean>(() => false);
+  androidBack.current = () => {
+    if (walletAlert) { setWalletAlert(null); return true; }
+    if (rowMenu) { setRowMenu(""); return true; }
+    if (dialog.current?.open) { if (panel === "create" && createStep !== "name") stepBack(); else popPanel(); return true; }
+    if (switcherOpen) { setSwitcherOpen(false); return true; }
+    if (nockBack.current?.()) return true;
+    if (nockOpenRef.current) { setNockOpen(false); return true; }
+    return false;
+  };
+  useEffect(() => { if (ANDROID) window.__pearlBack = () => androidBack.current(); }, []);
   // No screenshots while a phrase is on screen: shown (create, backup) or typed (restore, as iOS redacts it).
   useEffect(() => { if (ANDROID) secureScreen(!!mnemonic && (panel === "create" || panel === "backup" || panel === "restore")); }, [mnemonic, panel]);
   // The app's 设置 → 钱包与安全 and Pearl 网络 pages (iOS SettingsPages.swift) drive the wallet through
   // window.__pearlWallet (web/src/android-host.ts).
   const hostListeners = useRef(new Set<() => void>());
-  const hostActions = useRef<{ open(target: WalletTarget): void; lock(): void; refresh(): void; setNetwork(network: Network): Promise<boolean>; send(address: string): boolean; setNockLink(shown: boolean): void }>(null);
+  const hostActions = useRef<{ open(target: WalletTarget): void; lock(): void; refresh(): void; setNetwork(network: Network): Promise<boolean>; send(address: string): boolean; setNock(on: boolean): void }>(null);
   // The 交易 tab's 从钱包转入 while the wallet was locked: opened once it is unlocked.
   const pendingSend = useRef<string | null>(null);
   const sendTo = (address: string) => { close(); setNockOpen(false); setTab("wallet"); startSend(); setTo(address); };
@@ -302,12 +349,13 @@ function App() {
       if (wallet?.watch && (target === "backup" || target === "recover")) return;
       // iOS 找回搁浅的找零: scan the change addresses, list what is stranded, sweep it to an address.
       if (target === "recover") { close(); setTab("wallet"); startRecover(); return; }
-      clearSecrets();
-      if (target === "remove") { if (wallet?.watch) { setWatchTarget(wallet); setPanel("watchRemove"); return; } setName(wallet?.name || ""); setPanel("settings"); return; }
-      setPanel(target);
+      // As in the iOS app's 设置 → 钱包: 管理钱包 is its own page, and 移除钱包 asks in an alert.
+      close();
+      if (target === "remove") { if (wallet) askRemove(wallet); return; }
+      setPanel(target === "wallets" ? "manage" : target);
     },
     lock() { void lock(); },
-    setNockLink(shown) { setNockLink(shown); },
+    setNock(on) { setNockEnabled(on); },
     refresh() { if (Date.now() - lastChain.current > 10000) quietRefresh(); },
     send(address) {
       const v = viewRef.current;
@@ -334,19 +382,20 @@ function App() {
         const v = viewRef.current, w = v?.wallets?.find((x) => x.id === v.selected);
         return { exists: !!v?.exists, locked: !v || v.locked, count: v?.wallets?.length || 0, network: v && !v.locked ? v.network || "mainnet" : null,
           address: v && !v.locked && v.network === "mainnet" && w ? w.primaryAddress || w.address : null,
-          readOnly: !!w?.watch, nockLink: nockState.current.available ? nockState.current.hidden ? "hidden" : "shown" : null };
+          readOnly: !!w?.watch, nock: nockHost.current };
       },
       open: (target) => hostActions.current?.open(target),
       lock: () => hostActions.current?.lock(),
       refresh: () => hostActions.current?.refresh(),
       setNetwork: (network) => hostActions.current?.setNetwork(network) ?? Promise.resolve(false),
-      wallets: () => {
+      wallets: (options) => {
         const v = viewRef.current;
         if (!v || v.locked || (v.network || "mainnet") !== "mainnet") return [];
-        return (v.wallets || []).filter((w) => !w.watch).map((w) => ({ name: w.name, address: w.primaryAddress || w.address }));
+        return (v.wallets || []).filter((w) => options?.readOnly || !w.watch)
+          .map((w) => ({ name: w.name, address: w.primaryAddress || w.address, ...w.watch ? { readOnly: true } : {} }));
       },
       send: (address) => hostActions.current?.send(address) ?? false,
-      setNockLink: (shown) => hostActions.current?.setNockLink(shown),
+      setNock: (on) => hostActions.current?.setNock(on),
       subscribe: (listener) => { hostListeners.current.add(listener); return () => { hostListeners.current.delete(listener); }; },
     };
     return () => { delete window.__pearlWallet; };
@@ -442,8 +491,7 @@ function App() {
   const nockOpenRef = useRef(false); nockOpenRef.current = nockOpen;
   const nockBack = useRef<(() => boolean) | null>(null);
   const nockRpc = <T,>(command: string, data: Record<string, unknown> = {}) => rpc<T>(command, { expectedWalletId: viewRef.current?.selected, ...data });
-  // The NOCK line's 关闭 (iOS NockInlineLink.hiddenKey): one setting for every wallet; 钱包设置 (Android:
-  // 设置 → 钱包与安全) brings it back.
+  // The extension: the NOCK line's 关闭, one setting for every wallet; 钱包设置 brings it back.
   const [nockLinkHidden, setNockLinkHidden] = useState(false);
   useEffect(() => {
     const changed = (changes: Record<string, chrome.storage.StorageChange>, area: string) => { if (area === "local" && NOCK_LINK_HIDDEN in changes) setNockLinkHidden(changes[NOCK_LINK_HIDDEN].newValue === true); };
@@ -452,18 +500,36 @@ function App() {
     return () => chrome.storage.onChanged.removeListener(changed);
   }, []);
   const setNockLink = (shown: boolean) => { setNockLinkHidden(!shown); void chrome.storage.local.set({ [NOCK_LINK_HIDDEN]: !shown }).catch(() => {}); };
+  // Android, as iOS since 2.1.9: NOCK is off until switched on in 设置 → 钱包与安全, for this device (nock/enabled.ts).
+  // Off, nothing NOCK runs: no entry on the wallet page, no NOCK page, no key derived, no node asked. null until read.
+  const [nockEnabled, setNockEnabledState] = useState<boolean | null>(ANDROID ? null : true);
+  useEffect(() => {
+    if (!ANDROID) return;
+    const changed = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      const next = area === "local" && NOCK_ENABLED in changes ? changes[NOCK_ENABLED].newValue : undefined;
+      if (typeof next === "boolean") setNockEnabledState(next);
+    };
+    chrome.storage.onChanged.addListener(changed);
+    void loadNockEnabled().then(setNockEnabledState).catch(() => setNockEnabledState(false));
+    return () => chrome.storage.onChanged.removeListener(changed);
+  }, []);
+  const setNockEnabled = (on: boolean) => { setNockEnabledState(on); void saveNockEnabled(on).catch(() => {}); };
+  const nockOn = nockEnabled === true;
+  // Switched off while the NOCK page is open: it closes, with whatever was on top of it (iOS NockWalletView).
+  useEffect(() => { if (!nockOn) setNockOpen(false); }, [nockOn]);
   // Whether the open wallet uses NOCK: then its strip shows regardless, and the switch doesn't apply.
   const [nockInUse, setNockInUse] = useState<boolean | null>(null);
   useEffect(() => {
     setNockInUse(null);
-    if (!view || view.locked || !view.selected || readOnly) return;
+    if (!view || view.locked || !view.selected || readOnly || !nockOn) return;
     let live = true;
     void nockRpc<{ inUse: boolean }>("nock-status").then((v) => { if (live) setNockInUse(v.inUse === true); }).catch(() => {});
     return () => { live = false; };
-  }, [view?.selected, view?.locked, readOnly, nockOpen]);
+  }, [view?.selected, view?.locked, readOnly, nockOpen, nockOn]);
   const nockSwitch = !!view && !view.locked && !!wallet && !readOnly && nockInUse === false;
-  const nockState = useRef({ hidden: false, available: false }); nockState.current = { hidden: nockLinkHidden, available: nockSwitch };
-  useEffect(() => { if (ANDROID) notifyHost(); }, [nockLinkHidden, nockSwitch]);
+  // 设置 → 钱包与安全's NOCK switch (WalletState.nock): not for a read-only wallet, which has no seed for NOCK.
+  const nockHost = useRef<boolean | null>(null); nockHost.current = view && !view.locked && wallet && !readOnly ? nockOn : null;
+  useEffect(() => { if (ANDROID) notifyHost(); }, [nockOn, readOnly]);
   const withSecret = (title: string, run: (secret: string) => void, create = false) => {
     if (!ANDROID) return;
     if (running.current || asking.current) { setMessage("更新中…"); return; }
@@ -478,29 +544,73 @@ function App() {
   // since (iOS clears it the same way).
   const pasted = useRef("");
   const forgetPasted = () => { if (ANDROID && pasted.current) void nativeCall("clipboard.clear", { text: pasted.current }).catch(() => {}); pasted.current = ""; };
-  async function copy(text: string) {
-    try { await navigator.clipboard.writeText(text); setMessage("已复制。"); } catch { setMessage("复制失败，请手动选择文字。"); }
+  // `quiet`: the caller shows 已复制 itself (the NOCK receive bar); a failure still shows here.
+  async function copy(text: string, quiet = false) {
+    try { await navigator.clipboard.writeText(text); if (!quiet) setMessage("已复制。"); return true; } catch { setMessage("复制失败，请手动选择文字。"); return false; }
   }
-  function start(mode: "create" | "restore") {
-    if (running.current) { setMessage("更新中…"); return; }
-    // Android names wallets like iOS: "Pearl Wallet", then "Pearl Wallet 2", … — the first name no wallet uses.
+  // The share sheet, for 分享 on the NOCK receive card: the app's on Android (the WebView has none); the browser's where
+  // it has one. Without either there is no 分享 button.
+  const share = ANDROID ? (text: string) => void nativeCall("share", { text }).catch(() => {})
+    : typeof navigator.share === "function" ? (text: string) => void navigator.share({ text }).catch(() => {}) : undefined;
+  // Android names wallets like iOS: "Pearl Wallet", then "Pearl Wallet 2", … — the first name no wallet uses.
+  function suggestedName() {
     const used = new Set(view?.wallets?.map((x) => x.name));
     let suggested = "Pearl Wallet";
     for (let n = 2; used.has(suggested); n++) suggested = `Pearl Wallet ${n}`;
-    clearSecrets(); setName(ANDROID ? suggested : view?.exists ? t("新钱包") : t("我的钱包")); setPanel(mode);
-    if (mode === "create") void act<{ mnemonic: string }>("generate", {}, (r) => setMnemonic(r.mnemonic));
+    return suggested;
+  }
+  // `from`: the Android panel this one opens over (添加钱包), which back and close return to.
+  function start(mode: "create" | "restore", from?: Panel) {
+    if (running.current) { setMessage("更新中…"); return; }
+    clearSecrets(); setName(ANDROID ? suggestedName() : view?.exists ? t("新钱包") : t("我的钱包")); setPanel(mode);
+    if (ANDROID) setTrail(from ? [...parents, from].join(",") : "");
+    // Android, as iOS: no phrase exists until 生成助记词 on the name step.
+    else if (mode === "create") void act<{ mnemonic: string }>("generate", {}, (r) => setMnemonic(r.mnemonic));
   }
   // iOS suggestedWatchName: "只读钱包", then "只读钱包 2", … — the first name no wallet uses.
-  function startWatch() {
+  function startWatch(from?: Panel) {
     if (running.current) { setMessage("更新中…"); return; }
     const used = new Set(view?.wallets?.map((x) => x.name));
     let suggested = t("只读钱包");
     for (let n = 2; used.has(suggested); n++) suggested = `${t("只读钱包")} ${n}`;
     clearSecrets(); setName(suggested); setWatchAddress(""); setPanel("watch");
+    if (ANDROID) setTrail(from ? [...parents, from].join(",") : "");
+  }
+  // Android (iOS WalletSwitcherMenu / ManageWalletsView): 添加钱包 (over 管理钱包 when its + opened it) and 管理钱包.
+  function openAdd(fromManage = false) { if (running.current) { setMessage("更新中…"); return; } close(); setTrail(fromManage ? "manage" : ""); setPanel("add"); }
+  function openManage() { close(); setPanel("manage"); }
+  // iOS CreateWalletView: 生成助记词, 上一步, and 确认并创建 once the three words are right. A failed save goes back to the phrase.
+  function generatePhrase() { void act<{ mnemonic: string }>("generate", {}, (r) => { setMnemonic(r.mnemonic); setCreateStep("phrase"); }); }
+  function stepBack() { setMessage(""); setQuizWrong(false); setQuizPick(null); if (createStep === "verify") setCreateStep("phrase"); else { setMnemonic(""); setCreateStep("name"); } }
+  function confirmCreate() {
+    const words = mnemonic.split(" ");
+    if (!quizPick || quizPick.positions.some((i) => quizPick.chosen[i] !== words[i])) { setQuizWrong(true); return; }
+    let saved = false;
+    withSecret(t("保存钱包"), (secret) => void act<View & { existing?: string }>("create", { name: name.trim() || suggestedName(), mnemonic, password: secret }, (r) => { saved = true; finishAdd(r.existing); })
+      .then(() => { if (!saved) { setQuizPick(null); setCreateStep("phrase"); } }), !view?.exists);
+  }
+  // iOS ImportWalletView: the phrase as typed or pasted (the vault normalizes it); a phrase already here opens that wallet.
+  function saveRestored() {
+    withSecret(t("保存钱包"), (secret) => void act<View & { existing?: string }>("create", { name: name.trim() || suggestedName(), mnemonic, password: secret }, (r) => { forgetPasted(); finishAdd(r.existing); }), !view?.exists);
+  }
+  function finishAdd(existing?: string) { dismissFlow(existing ? { text: t("该钱包已在本机，已切换到「{name}」", { name: existing }) } : null); }
+  // iOS ManageWalletsView's alerts. Removing a wallet with a phrase asks for the device check (the vault password).
+  function askRename(target: WalletInfo) { setRowMenu(""); setMessage(""); setRenameText(target.name); setWalletAlert({ kind: "rename", wallet: target }); }
+  function askRemove(target: WalletInfo) { setRowMenu(""); setMessage(""); setWalletAlert({ kind: "remove", wallet: target }); }
+  function saveRename(target: WalletInfo) {
+    const next = renameText.trim();
+    if (!next || next === target.name) { setWalletAlert(null); return; }
+    void act("rename", { id: target.id, name: next }, () => setWalletAlert(null));
+  }
+  function removeWallet(target: WalletInfo) {
+    const stay = panel === "manage";
+    const done = (r: View) => { setWalletAlert(null); if (!r.exists) void forgetDeviceSecret(); if (!stay || !r.exists) close(); };
+    if (target.watch) { void act<View>("watch-remove", { id: target.id }, done); return; }
+    withSecret(w.removeWallet, (secret) => void act<View>("delete", { id: target.id, name: target.name, password: secret }, done));
   }
   function addWatch() {
     type Added = View & { existing?: string };
-    const done = (r: Added) => { close(); if (r.existing) setMessage({ text: t("该钱包已在本机，已切换到「{name}」", { name: r.existing }) }); };
+    const done = (r: Added) => { if (ANDROID) { finishAdd(r.existing); return; } close(); if (r.existing) setMessage({ text: t("该钱包已在本机，已切换到「{name}」", { name: r.existing }) }); };
     const data = { name, address: watchAddress };
     if (view?.exists) { void act<Added>("watch-add", data, done); return; }
     // As the first wallet it makes the vault: Android's device key, or the extension's new password.
@@ -515,10 +625,9 @@ function App() {
     setRecovery(false);
     clearSecrets(); setTo(""); setValue(""); setMaximum(false); setPanel("send"); loadFee();
   }
-  // 检查历史找零 used to rescan with no word on screen. In the app it opens the 找回搁浅的找零 sheet
-  // (scanning, then what it found, as on iOS); the extension reports progress under the buttons.
+  // The extension's 检查历史找零 reports progress under the buttons. The Android app has neither it nor 找零归集 on the
+  // wallet page: iOS's 找回搁浅的找零 (设置 → 钱包与安全, startRecover) scans and sweeps.
   function scanChange() {
-    if (ANDROID) { startRecover(); return; }
     setChangeScan("running");
     void act("refresh", { scan: true }, () => setChangeScan("done")).finally(() => setChangeScan((s) => s === "running" ? "" : s));
   }
@@ -589,31 +698,120 @@ function App() {
         <small>{tx.time ? ago(tx.time) : ""}</small>
       </button>; })}
   </section>;
-  // iOS Dashboard's shortcut card: 价格提醒 (with the live count once Pro has some), 桌面小组件 until a widget
-  // is placed, and the NOCK line until NOCK is used or the line is closed: rows of one card, not loose links.
+  // iOS Dashboard's shortcut card: 价格和到账提醒 (with the live count once Pro has some), 桌面小组件 until a widget
+  // is placed, and the NOCK line while NOCK is on but not used yet (the extension: until the line is closed): rows
+  // of one card, not loose links.
   const alertState = host?.alerts?.();
   const shortcuts = <section className="shortcut-card">
-    {ANDROID && alertState && <button className="shortcut-row" onClick={() => host?.open?.("alerts")}><Icon name="alerts" /><span className="shortcut-title">{w.priceAlerts}</span>{alertState.pro && alertState.active > 0 && <small>{fill(w.alertsOn, alertState.active)}</small>}<Icon name="chevron" className="shortcut-chevron" /></button>}
+    {ANDROID && alertState && <button className="shortcut-row" onClick={() => host?.open?.("alerts")}><Icon name="alerts" /><span className="shortcut-title">{w.alerts}</span>{alertState.pro && alertState.active > 0 && <small>{fill(w.alertsOn, alertState.active)}</small>}<Icon name="chevron" className="shortcut-chevron" /></button>}
     {ANDROID && host?.widgetPlaced && !host.widgetPlaced() && <button className="shortcut-row" onClick={() => host?.open?.("widgets")}><Icon name="app" /><span className="shortcut-title">{w.widgets}</span><Icon name="chevron" className="shortcut-chevron" /></button>}
-    {wallet && !readOnly && !nockLinkHidden && <NockEntry key={`link-${wallet.id}`} slot="link" lang={lang} rpc={nockRpc} walletId={wallet.id} secondary={secondary} rates={market.rates} onOpen={() => { clearSecrets(); setNockOpen(true); }} onClose={() => { clearSecrets(); setPanel("nockClose"); }} />}
+    {wallet && !readOnly && (ANDROID ? nockOn : !nockLinkHidden) && <NockEntry key={`link-${wallet.id}`} slot="link" lang={lang} rpc={nockRpc} walletId={wallet.id} secondary={secondary} rates={market.rates} onOpen={() => { clearSecrets(); setNockOpen(true); }} onClose={ANDROID ? undefined : () => { clearSecrets(); setPanel("nockClose"); }} />}
   </section>;
   // 添加只读钱包 under the welcome screen's two seed buttons: a quiet link, what it is in the ⓘ beside it.
-  const watchLink = <div className="watch-link"><button type="button" disabled={busy} onClick={startWatch}><Icon name="eye" />{t("添加只读钱包")}</button><InfoTip label={t("只读钱包")} title={t("只读钱包")} text={t("只填一个地址，就能查看它的余额和交易记录。不需要助记词，也不能转账。")} /></div>;
+  const watchLink = <div className="watch-link"><button type="button" disabled={busy} onClick={() => startWatch(panel === "add" ? "add" : undefined)}><Icon name="eye" />{t("添加只读钱包")}</button><InfoTip label={t("只读钱包")} title={t("只读钱包")} text={t("只填一个地址，就能查看它的余额和交易记录。不需要助记词，也不能转账。")} /></div>;
   const notice = message && <div role="status" className="message">{typeof message === "string" ? messageText(lang, message) : "text" in message ? message.text : "account" in message ? accountCopy(lang)[message.account] : ANDROID && <span className="android-lock-help">{w[message.android]}{message.android === "needLock" && <button onClick={openSecuritySettings}>{w.openSettings}</button>}</span>}<button aria-label={t("关闭提示")} onClick={() => setMessage("")}>×</button></div>;
+  // Android, as the iOS app: the switcher's menu (WalletSwitcherMenu), 添加钱包 (AddWalletView), 创建钱包 in three steps
+  // (CreateWalletView, SeedGrid, VerifyStep), 恢复钱包 (ImportWalletView), 管理钱包 (ManageWalletsView) and its alerts.
+  const isCurrent = (item: WalletInfo) => item.id === view?.selected;
+  const switcherMenu = ANDROID && switcherOpen && view?.wallets && <div className="switcher-menu" role="menu" aria-label={w.switchWallet}>
+    <p className="switcher-section" aria-hidden="true">{w.switchWallet}</p>
+    {view.wallets.map((item) => <button key={item.id} type="button" role="menuitemradio" aria-checked={isCurrent(item)} className="switcher-item" onClick={() => { setSwitcherOpen(false); if (!isCurrent(item)) void act("select", { id: item.id }); }}>
+      <span className="switcher-mark">{isCurrent(item) && <Icon name="check" />}</span>
+      <span className="switcher-text"><strong>{item.name}</strong><small>{item.watch ? `${t("只读")} · ` : ""}{shortAddr(item.primaryAddress || item.address)}</small></span>
+    </button>)}
+    <hr />
+    <button type="button" role="menuitem" className="switcher-item" onClick={() => openAdd()}><span className="switcher-mark"><Icon name="plus" /></span><span className="switcher-text">{w.addWallet}</span></button>
+    <button type="button" role="menuitem" className="switcher-item" onClick={() => openManage()}><span className="switcher-mark"><Icon name="list" /></span><span className="switcher-text">{w.manageWallets}</span></button>
+  </div>;
+  const addPanel = ANDROID && <div className="add-wallet">
+    <span className="add-badge"><Icon name="wallet" /></span>
+    <button type="button" className="primary wide" disabled={busy} onClick={() => start("create", "add")}><Icon name="create" />{w.createNew}</button>
+    <button type="button" className="wide" disabled={busy} onClick={() => start("restore", "add")}><Icon name="restore" />{t("用助记词恢复钱包")}</button>
+    {watchLink}
+  </div>;
+  const stepNumber = createStep === "name" ? 1 : createStep === "phrase" ? 2 : 3;
+  const phraseWords = mnemonic ? mnemonic.split(" ") : [];
+  const createPanel = ANDROID && <div className="create-flow">
+    <div className="flow-steps">{createStep !== "name" ? <button type="button" className="flow-back" onClick={stepBack}><Icon name="chevron" />{w.stepBack}</button> : <span />}<span className="flow-step-badge"><Icon name="sparkles" />{fill(w.stepOf, stepNumber)}</span></div>
+    <div className="wallet-hero flow-hero"><img src="./icon.png" alt="" /><strong>{w.createWallet}</strong></div>
+    <div className="flow-progress" role="progressbar" aria-label={fill(w.stepOf, stepNumber)} aria-valuemin={1} aria-valuemax={3} aria-valuenow={stepNumber} data-step={stepNumber}><span /></div>
+    {createStep === "name" ? form(() => generatePhrase(), <>
+      <section className="flow-card"><h3 className="flow-head"><Icon name="wallet" />{w.walletName}</h3><input aria-label={w.walletName} value={name} placeholder="Pearl Wallet" maxLength={40} autoComplete="off" onChange={(e) => setName(e.target.value)} /></section>
+      <button className="primary wide" disabled={busy}><Icon name="key" />{w.generatePhrase}</button>
+    </>) : createStep === "phrase" ? <>
+      {/* No copy button: the phrase never reaches the clipboard (FLAG_SECURE is on while it shows). */}
+      <section className="flow-card"><h3 className="flow-head"><Icon name="key" />{w.yourPhrase}</h3><div className="seed-grid">{phraseWords.map((word, i) => <div key={i}><span className="sr-only">{fill(w.wordAria, i + 1, word)}</span><small aria-hidden="true">{i + 1}</small><span className="seed-word" aria-hidden="true">{word}</span></div>)}</div></section>
+      <p className="seed-warning flow-warning"><Icon name="warning" />{t("请离线手抄，切勿截图、拍照或复制——任何人拿到它都能转走你的资产。")}</p>
+      <button type="button" className="primary wide" onClick={() => { setQuizPick(makeQuiz(phraseWords)); setQuizWrong(false); setCreateStep("verify"); }}>{w.backedUp}</button>
+    </> : quizPick && <>
+      <h3 className="flow-head flow-verify"><Icon name="shield" />{w.verifyPhrase}</h3>
+      {quizPick.positions.map((i, n) => <div key={i} className="flow-card quiz-card" role="group" aria-labelledby={`quiz-${i}`}><p id={`quiz-${i}`}>{fill(w.wordN, i + 1)}</p><div className="quiz-options">{quizPick.options[n].map((word) => <button type="button" key={word} aria-pressed={quizPick.chosen[i] === word} className={quizPick.chosen[i] === word ? "selected" : ""} onClick={() => { setQuizWrong(false); setQuizPick((q) => q && { ...q, chosen: { ...q.chosen, [i]: word } }); }}>{word}</button>)}</div></div>)}
+      {quizWrong && <p className="flow-error" role="alert"><Icon name="close" />{w.chooseWrong}</p>}
+      {confirmNote}
+      <button type="button" className="primary wide positive" disabled={busy || quizPick.positions.some((i) => !quizPick.chosen[i])} onClick={confirmCreate}>{w.confirmCreate}</button>
+    </>}
+  </div>;
+  const restoreCount = wordCount(mnemonic), restoreReady = [12, 24].includes(restoreCount);
+  const restorePanel = ANDROID && form(() => saveRestored(), <>
+    <div className="wallet-hero flow-hero"><span className="flow-badge"><Icon name="restore" /></span><strong>{w.restoreWallet}</strong></div>
+    <section className="flow-card"><h3 className="flow-head"><Icon name="wallet" />{w.walletName}</h3><input aria-label={w.walletName} value={name} placeholder="Pearl Wallet" maxLength={40} autoComplete="off" onChange={(e) => setName(e.target.value)} /></section>
+    <section className="flow-card"><div className="flow-head-row"><h3 className="flow-head"><Icon name="key" />{w.phraseWords}</h3><button type="button" className="flow-paste" onClick={() => void nativeCall<{ text: string }>("clipboard.read").then((r) => { pasted.current = r.text; setMnemonic(r.text.trim()); }).catch(() => {})}>{w.paste}</button></div>
+      <textarea aria-label={w.phraseWords} className="phrase-input" value={mnemonic} autoComplete="off" autoCapitalize="none" autoCorrect="off" spellCheck={false} rows={5} onChange={(e) => setMnemonic(e.target.value)} />
+      <small className={restoreReady ? "muted" : "phrase-count-off"}>{w.wordsEntered.replace("{count}", String(restoreCount))}</small>
+    </section>
+    {confirmNote}
+    <button className="primary wide" disabled={busy || !restoreReady}><Icon name="restore" />{busy ? w.restoring : w.restoreWallet}</button>
+  </>);
+  const managePanel = ANDROID && <div className="manage-list">{view?.wallets?.map((item) => <div className="manage-row" key={item.id}>
+    {/* A tap opens the wallet; ••• or a long press offers 重命名 and 删除 (iOS swipe actions / context menu). */}
+    <button type="button" className="manage-open" aria-current={isCurrent(item) || undefined} disabled={busy} onClick={() => { setRowMenu(""); if (!isCurrent(item)) void act("select", { id: item.id }); }} onContextMenu={(e) => { e.preventDefault(); setRowMenu(item.id); }}>
+      <span className="manage-badge"><Icon name={item.watch ? "eye" : "wallet"} /></span>
+      <span className="manage-text"><span className="manage-name"><strong>{item.name}</strong>{item.watch && <span className="manage-watch">{t("只读")}</span>}</span><small>{shortAddr(item.primaryAddress || item.address)}</small></span>
+      {isCurrent(item) && <span className="manage-current" role="img" aria-label={w.currentWallet}><Icon name="check" /></span>}
+    </button>
+    <button type="button" className="icon-button manage-more" aria-label={`${item.name}: ${w.rename}, ${w.delete}`} aria-haspopup="menu" aria-expanded={rowMenu === item.id} disabled={busy} onClick={() => setRowMenu(rowMenu === item.id ? "" : item.id)}><Icon name="more" /></button>
+    {rowMenu === item.id && <div className="row-menu" role="menu"><button type="button" role="menuitem" onClick={() => askRename(item)}><Icon name="rename" />{w.rename}</button><button type="button" role="menuitem" className="danger-button" onClick={() => askRemove(item)}><Icon name="delete" />{w.delete}</button></div>}
+  </div>)}</div>;
+  // iOS .alert: centred, a title, the consequence for 移除 (a read-only address vs. a phrase), 取消 and the action.
+  const walletAlertBox = ANDROID && <dialog ref={alertDialog} className="wallet-alert" aria-labelledby="wallet-alert-title" onCancel={(e) => { e.preventDefault(); if (!busy) setWalletAlert(null); }}>
+    {walletAlert && <div className="wallet-alert-inner">
+      <h2 id="wallet-alert-title">{walletAlert.kind === "rename" ? w.renameWallet : fill(w.removeAsk, walletAlert.wallet.name)}</h2>
+      {walletAlert.kind === "remove" && <p>{walletAlert.wallet.watch ? t("只从本机删除这个地址，不影响链上资产，之后可以再添加。") : w.removeSeed}</p>}
+      {notice}
+      {walletAlert.kind === "rename" ? form(() => saveRename(walletAlert.wallet), <>
+        <input aria-label={w.walletName} data-autofocus value={renameText} placeholder="Pearl Wallet" maxLength={40} autoComplete="off" onChange={(e) => setRenameText(e.target.value)} />
+        <div className="wallet-alert-actions"><button type="button" disabled={busy} onClick={() => setWalletAlert(null)}>{t("取消")}</button><button className="primary" disabled={busy}>{t("保存")}</button></div>
+      </>) : <div className="wallet-alert-actions"><button type="button" disabled={busy} onClick={() => setWalletAlert(null)}>{t("取消")}</button><button type="button" className="danger-button" disabled={busy} onClick={() => removeWallet(walletAlert.wallet)}>{w.removeWallet}</button></div>}
+    </div>}
+  </dialog>;
+  const panelTitles: Record<string, string> = { create: ANDROID ? w.createWallet : t("创建钱包"), restore: ANDROID ? w.restoreWallet : t("恢复钱包"), receive: t("收款"), send: review ? t("确认转账") : t(recovery ? "找零归集" : "转账"), settings: t("钱包设置"), wallets: t("选择钱包"), backup: t("备份助记词"), retry: t("重试原交易"), discard: t("移除待确认记录"), contact: t(contactDraft.id ? "编辑联系人" : "新增联系人"), donate: t(review ? "确认捐赠" : "支持开发者"), security: securityCopy(lang).title, recover: ANDROID ? w.recoverTitle : "", tx: t("交易详情"), lookup: t("交易查询"), watch: t("只读钱包"), watchSend: t("只读钱包不能转账"), watchRemove: t("移除只读钱包"), nockClose: t("关闭 NOCK 钱包入口？"), add: ANDROID ? w.addWallet : "", manage: ANDROID ? w.manageWallets : "" };
   return <div className="shell">
     <header><div className="brand"><img src="./icon.png" alt="" /><div><strong>Pearl Hub</strong><small>{t("PRL 钱包")}</small></div></div><div className="header-actions">
       {!ANDROID && <button className="icon-button" title={t("在完整页面打开")} aria-label={t("在完整页面打开")} onClick={() => void chrome.tabs.create({ url: chrome.runtime.getURL("index.html") })}><Icon name="external" /></button>}
-      <button id="wallet-settings" className="icon-button" title={t("钱包设置")} aria-label={t("钱包设置")} aria-haspopup="dialog" aria-expanded={panel === "settings"} disabled={busy} onClick={() => { clearSecrets(); setName(wallet?.name || ""); setPanel("settings"); }}><Icon name="options" /></button>
+      {/* Android: every setting needs an unlocked wallet, so the button would open an empty sheet; iOS's UnlockView and WelcomeView have none either. */}
+      {(!ANDROID || (view?.exists && !view.locked)) && <button id="wallet-settings" className="icon-button" title={t("钱包设置")} aria-label={t("钱包设置")} aria-haspopup="dialog" aria-expanded={panel === "settings"} disabled={busy} onClick={() => { clearSecrets(); setName(wallet?.name || ""); setPanel("settings"); }}><Icon name="options" /></button>}
       {view && !view.locked && <button className="icon-button header-lock" aria-label={t("锁定钱包")} title={t("锁定钱包")} onClick={() => void lock()}><Icon name="lock" /><span>{t("锁定")}</span></button>}
     </div></header>
-    {!panel && notice}
+    {!panel && !walletAlert && notice}
     {!view ? <main className="welcome"><p>{t("正在打开钱包…")}</p></main> : !view.exists ? <main className="welcome">
-      <div className="welcome-mark"><Icon name="wallet" /></div><h1 className="sr-only">{t("PRL 钱包")}</h1>
-      <button className="primary" disabled={busy} onClick={() => start("create")}>{t("创建钱包")}</button><button disabled={busy} onClick={() => start("restore")}>{t("恢复已有钱包")}</button>
-      {watchLink}
+      {ANDROID ? <>
+        {/* iOS WelcomeView: the hero, the two seed buttons, the quiet read-only link, and the one line about where to get the app. */}
+        <div className="wallet-hero welcome-hero"><img src="./icon.png" alt="" /><h1>{w.welcomeTitle}</h1></div>
+        <button className="primary" disabled={busy} onClick={() => start("create")}><Icon name="create" />{w.createNew}</button>
+        <button disabled={busy} onClick={() => start("restore")}><Icon name="restore" />{t("用助记词恢复钱包")}</button>
+        {watchLink}
+        <p className="welcome-note">{w.welcomeNote}</p>
+      </> : <>
+        <div className="welcome-mark"><Icon name="wallet" /></div><h1 className="sr-only">{t("PRL 钱包")}</h1>
+        <button className="primary" disabled={busy} onClick={() => start("create")}>{t("创建钱包")}</button><button disabled={busy} onClick={() => start("restore")}>{t("恢复已有钱包")}</button>
+        {watchLink}
+      </>}
     </main> : view.locked ? <main className="welcome locked"><div className="welcome-mark"><Icon name="lock" /></div><h1>{t("钱包已锁定")}<InfoTip label={t("说明")} text={ANDROID ? w.autoLock : t("离开操作 5 分钟后自动锁定；重启浏览器后需重新解锁。")} /></h1>{form(() => { if (ANDROID) withSecret(t("解锁钱包"), (secret) => void act("unlock", { password: secret })); else void act("unlock", { password }, () => setPassword("")); }, <>{!ANDROID && passwordField()}<button className="primary" disabled={busy}>{busy ? t("正在解锁…") : t("解锁钱包")}</button></>)}</main> : <main>
-      <div className="wallet-bar"><button id="wallet-switcher" className="wallet-switcher" aria-label={t("选择钱包")} aria-haspopup="dialog" aria-expanded={panel === "wallets"} disabled={busy} onClick={() => { clearSecrets(); setPanel("wallets"); }}>{readOnly && <Icon name="eye" className="switcher-watch" />}<span>{wallet?.name}</span><Icon name="chevron" /></button><span className="wallet-badges">{readOnly && <span className="network-badge watch-chip"><Icon name="eye" />{t("只读")}</span>}<span className={view.network === "testnet" ? "network-badge testnet" : "network-badge"}>{t(view.network === "testnet" ? "测试网" : "主网")}</span></span></div>
-      {nockOpen && wallet ? <NockPage key={wallet.id} lang={lang} rpc={nockRpc} walletId={wallet.id} secondary={secondary} rates={market.rates} copy={(text) => void copy(text)} onBack={() => setNockOpen(false)} android={ANDROID} secret={(title, run) => withSecret(title, run)} confirmNote={confirmNote} backHandler={nockBack} /> : <>
+      <div className="wallet-bar">{ANDROID
+        // iOS WalletSwitcherMenu: the wallet's icon and name open a menu of every wallet, 添加钱包 and 管理钱包.
+        ? <button id="wallet-switcher" className="wallet-switcher" aria-label={`${w.switchWallet}: ${wallet?.name || ""}`} aria-haspopup="menu" aria-expanded={switcherOpen} disabled={busy} onClick={() => setSwitcherOpen(!switcherOpen)}><Icon name={readOnly ? "eye" : "wallet"} className="switcher-watch" /><span>{wallet?.name}</span><Icon name="chevron" /></button>
+        : <button id="wallet-switcher" className="wallet-switcher" aria-label={t("选择钱包")} aria-haspopup="dialog" aria-expanded={panel === "wallets"} disabled={busy} onClick={() => { clearSecrets(); setPanel("wallets"); }}>{readOnly && <Icon name="eye" className="switcher-watch" />}<span>{wallet?.name}</span><Icon name="chevron" /></button>}{switcherMenu}<span className="wallet-badges">{readOnly && <span className="network-badge watch-chip"><Icon name="eye" />{t("只读")}</span>}<span className={view.network === "testnet" ? "network-badge testnet" : "network-badge"}>{t(view.network === "testnet" ? "测试网" : "主网")}</span></span></div>
+      {nockOpen && nockOn && wallet ? <NockPage key={wallet.id} lang={lang} rpc={nockRpc} walletId={wallet.id} secondary={secondary} rates={market.rates} copy={copy} share={share} onBack={() => setNockOpen(false)} android={ANDROID} secret={(title, run) => withSecret(title, run)} confirmNote={confirmNote} backHandler={nockBack} /> : <>
       <nav className="wallet-nav"><button aria-pressed={tab === "wallet"} className={tab === "wallet" ? "selected" : ""} onClick={() => setTab("wallet")}>{t("钱包")}</button><button aria-pressed={tab === "history"} className={tab === "history" ? "selected" : ""} onClick={() => setTab("history")}>{t("交易记录")}</button><button aria-pressed={tab === "contacts"} className={tab === "contacts" ? "selected" : ""} onClick={() => setTab("contacts")}>{t("地址簿")}</button></nav>
       {ANDROID && tab === "wallet" && androidUpdate?.latest && <UpdateBanner lang={lang} latest={androidUpdate.latest} dismiss={androidUpdate.dismiss} />}
       <section className={tab === "wallet" ? "balance-card" : "balance-card compact"}>
@@ -637,8 +835,8 @@ function App() {
       {ANDROID && tab === "wallet" && recentCard}
       {ANDROID && tab === "wallet" && shortcuts}
       {!!view.pending?.length && <section className="section"><h2>{t("待确认转账")}</h2>{view.pending.map((p) => <article className="pending" key={p.txid}><div><strong>{amount(p.amount)} PRL</strong><span>{p.status === "rejected" ? t("节点拒绝了此交易") : p.status === "unknown" ? t("广播结果待核对") : t("已广播，等待确认")}</span></div><code>{p.txid}</code><small>{p.status === "unknown" ? t("网络回复丢失时，交易可能已经发出。核对状态或重试同一笔交易。") : t("确认前保留原交易，防止重复付款。")}</small><div className="actions"><button disabled={busy} onClick={() => void act("check", { txid: p.txid })}>{t("核对链上状态")}</button>{p.status !== "submitted" && <button disabled={busy} onClick={() => { clearSecrets(); setRetry(p.txid); setPanel("retry"); }}>{t("重试原交易")}</button>}<button disabled={busy} onClick={() => { clearSecrets(); setRetry(p.txid); setPanel("discard"); }}>{t("移除待确认记录")}</button><a href={explorer(p.txid)} target="_blank" rel="noreferrer">{t("浏览器 ↗")}</a></div></article>)}</section>}
-      {tab === "contacts" ? <section className="section contacts"><div className="section-heading"><h2>{t("地址簿")}</h2><button disabled={busy} onClick={() => editContact()}>{t("添加")}</button></div>{!contacts.length && <p className="empty">{t("暂无联系人")}</p>}{contacts.map((c) => <article className="contact" key={c.id}><strong>{c.name}</strong>{c.note && <small>{c.note}</small>}<code>{c.address}</code><div className="actions"><button onClick={() => void copy(c.address)}>{t("复制地址")}</button><details><summary aria-label={t("编辑联系人")}><Icon name="more" /></summary><button disabled={busy} onClick={() => editContact(c)}>{t("编辑联系人")}</button><button className="danger-button" disabled={busy} onClick={() => void act("contact-remove", { id: c.id })}>{t("删除联系人")}</button></details></div></article>)}</section> : tab === "wallet" ? <section className="section"><h2 className="title-tip">{t("管理钱包")}{!readOnly && <InfoTip label={t("说明")} text={[t("助记词和私钥不会发送给链上查询服务。恢复原生钱包后，点击“检查历史找零”核对旧地址资金。"), t("已验证地址路径的输入均可签名；历史找零扫描只读取转出记录，支持分页和增量更新。"), t("旧记录未提供地址路径时，手动扫描最多核对前 10,000 个找零地址。")].join("\n\n")} />}</h2><div className="manage-grid"><button aria-label={t("＋ 创建钱包")} disabled={busy} onClick={() => start("create")}><Icon name="create" /><span>{t("创建钱包")}</span></button><button aria-label={t("恢复钱包")} disabled={busy} onClick={() => start("restore")}><Icon name="restore" /><span>{t("恢复钱包")}</span></button><button aria-label={t("添加只读钱包")} disabled={busy} onClick={startWatch}><Icon name="eye" /><span>{t("只读钱包")}</span></button>{!readOnly && <><button aria-label={t("备份助记词")} onClick={() => { clearSecrets(); setPanel("backup"); }}><Icon name="backup" /><span>{t("备份助记词")}</span></button><button aria-label={t("检查历史找零")} disabled={busy} onClick={scanChange}><Icon name="refresh" /><span>{t("检查历史找零")}</span></button><button aria-label={t("找零归集")} disabled={busy} onClick={() => { startSend(); setRecovery(true); setTo(wallet?.primaryAddress || wallet?.address || ""); setMaximum(true); }}><Icon name="change" /><span>{t("找零归集")}</span></button></>}</div>{changeScan && <p role="status" className="scan-status">{t(changeScan === "running" ? "正在检查历史找零…" : "历史找零已检查完毕，余额已更新。")}</p>}</section> : <section className="section"><div className="section-heading"><h2>{t("交易记录")}</h2><div className="section-tools">{view.snapshot && <small>{new Date(view.snapshot.time).toLocaleTimeString(lang)}</small>}<button className="icon-button" title={t("交易查询")} aria-label={t("交易查询")} onClick={openLookup}><Icon name="search" /></button></div></div>{!view.snapshot ? <p className="empty">{t("刷新后查看链上交易。")}</p> : !view.snapshot.history.length ? <p className="empty">{t("尚无交易记录。")}</p> : view.snapshot.history.map((tx) => <article className="transaction" key={tx.txid} onClick={(e) => { if (!(e.target as HTMLElement).closest("button, a")) openTx(tx.txid); }}><span className={!(tx.sent ?? BigInt(tx.delta) <= 0n) ? "tx-icon incoming" : "tx-icon"}>{!(tx.sent ?? BigInt(tx.delta) <= 0n) ? <Icon name="received" /> : <Icon name="sent" />}</span><div className="tx-main"><strong>{!(tx.sent ?? BigInt(tx.delta) <= 0n) ? t("收到 PRL") : t("转出或手续费")}</strong><small className="tx-meta"><span>{tx.time ? new Date(tx.time * 1000).toLocaleString(lang) : t("等待确认")}</span> · <span>{tx.confirmations ? t("{count} 次确认", { count: tx.confirmations }) : t("未确认")}</span></small></div><div className="tx-amount"><b>{tx.sent ? "−" : "+"}{amount(tx.amount ?? (BigInt(tx.delta) < 0n ? -BigInt(tx.delta) : BigInt(tx.delta)))}</b>{tx.sent && tx.fee != null && <small>{t("手续费")} · {amount(tx.fee)} PRL</small>}</div><button className="icon-button tx-open" aria-label={t("交易详情")} title={t("交易详情")} onClick={() => openTx(tx.txid)}><Icon name="chevron" /></button><div className="tx-id"><small>{t("交易 ID")}</small><code title={tx.txid}>{tx.txid.slice(0, 12)}…{tx.txid.slice(-8)}</code><button className="tx-copy" aria-label={t("复制交易 ID")} title={t("复制交易 ID")} onClick={() => void copy(tx.txid)}><Icon name="copy" /></button></div>{tx.address && <div className="peer"><small>{t(tx.sent ? "去向" : "来源")}{payee(tx.address) && <strong>{payee(tx.address)}</strong>}</small><div className="peer-address"><code title={tx.address}>{tx.address.slice(0, 12)}…{tx.address.slice(-8)}</code><button className="peer-copy" aria-label={t("复制地址")} onClick={() => void copy(tx.address!)}>{t("复制")}</button></div></div>}</article>)}{view.snapshot?.hasMore && <button className="wide" disabled={busy} onClick={() => void act("refresh", { page: view.snapshot!.page + 1 })}>{t("加载更多")}</button>}</section>}
-      {tab === "wallet" && wallet && !readOnly && <NockEntry key={`strip-${wallet.id}`} slot="strip" lang={lang} rpc={nockRpc} walletId={wallet.id} secondary={secondary} rates={market.rates} onOpen={() => { clearSecrets(); setNockOpen(true); }} />}
+      {tab === "contacts" ? <section className="section contacts"><div className="section-heading"><h2>{t("地址簿")}</h2><button disabled={busy} onClick={() => editContact()}>{t("添加")}</button></div>{!contacts.length && <p className="empty">{t("暂无联系人")}</p>}{contacts.map((c) => <article className="contact" key={c.id}><strong>{c.name}</strong>{c.note && <small>{c.note}</small>}<code>{c.address}</code><div className="actions"><button onClick={() => void copy(c.address)}>{t("复制地址")}</button><details><summary aria-label={t("编辑联系人")}><Icon name="more" /></summary><button disabled={busy} onClick={() => editContact(c)}>{t("编辑联系人")}</button><button className="danger-button" disabled={busy} onClick={() => void act("contact-remove", { id: c.id })}>{t("删除联系人")}</button></details></div></article>)}</section> : tab === "wallet" ? !ANDROID && <section className="section"><h2 className="title-tip">{t("管理钱包")}{!readOnly && <InfoTip label={t("说明")} text={[t("助记词和私钥不会发送给链上查询服务。恢复原生钱包后，点击“检查历史找零”核对旧地址资金。"), t("已验证地址路径的输入均可签名；历史找零扫描只读取转出记录，支持分页和增量更新。"), t("旧记录未提供地址路径时，手动扫描最多核对前 10,000 个找零地址。")].join("\n\n")} />}</h2><div className="manage-grid"><button aria-label={t("＋ 创建钱包")} disabled={busy} onClick={() => start("create")}><Icon name="create" /><span>{t("创建钱包")}</span></button><button aria-label={t("恢复钱包")} disabled={busy} onClick={() => start("restore")}><Icon name="restore" /><span>{t("恢复钱包")}</span></button><button aria-label={t("添加只读钱包")} disabled={busy} onClick={() => startWatch()}><Icon name="eye" /><span>{t("只读钱包")}</span></button>{!readOnly && <><button aria-label={t("备份助记词")} onClick={() => { clearSecrets(); setPanel("backup"); }}><Icon name="backup" /><span>{t("备份助记词")}</span></button><button aria-label={t("检查历史找零")} disabled={busy} onClick={scanChange}><Icon name="refresh" /><span>{t("检查历史找零")}</span></button><button aria-label={t("找零归集")} disabled={busy} onClick={() => { startSend(); setRecovery(true); setTo(wallet?.primaryAddress || wallet?.address || ""); setMaximum(true); }}><Icon name="change" /><span>{t("找零归集")}</span></button></>}</div>{changeScan && <p role="status" className="scan-status">{t(changeScan === "running" ? "正在检查历史找零…" : "历史找零已检查完毕，余额已更新。")}</p>}</section> : <section className="section"><div className="section-heading"><h2>{t("交易记录")}</h2><div className="section-tools">{view.snapshot && <small>{new Date(view.snapshot.time).toLocaleTimeString(lang)}</small>}<button className="icon-button" title={t("交易查询")} aria-label={t("交易查询")} onClick={openLookup}><Icon name="search" /></button></div></div>{!view.snapshot ? <p className="empty">{t("刷新后查看链上交易。")}</p> : !view.snapshot.history.length ? <p className="empty">{t("尚无交易记录。")}</p> : view.snapshot.history.map((tx) => <article className="transaction" key={tx.txid} onClick={(e) => { if (!(e.target as HTMLElement).closest("button, a")) openTx(tx.txid); }}><span className={!(tx.sent ?? BigInt(tx.delta) <= 0n) ? "tx-icon incoming" : "tx-icon"}>{!(tx.sent ?? BigInt(tx.delta) <= 0n) ? <Icon name="received" /> : <Icon name="sent" />}</span><div className="tx-main"><strong>{!(tx.sent ?? BigInt(tx.delta) <= 0n) ? t("收到 PRL") : t("转出或手续费")}</strong><small className="tx-meta"><span>{tx.time ? new Date(tx.time * 1000).toLocaleString(lang) : t("等待确认")}</span> · <span>{tx.confirmations ? t("{count} 次确认", { count: tx.confirmations }) : t("未确认")}</span></small></div><div className="tx-amount"><b>{tx.sent ? "−" : "+"}{amount(tx.amount ?? (BigInt(tx.delta) < 0n ? -BigInt(tx.delta) : BigInt(tx.delta)))}</b>{tx.sent && tx.fee != null && <small>{t("手续费")} · {amount(tx.fee)} PRL</small>}</div><button className="icon-button tx-open" aria-label={t("交易详情")} title={t("交易详情")} onClick={() => openTx(tx.txid)}><Icon name="chevron" /></button><div className="tx-id"><small>{t("交易 ID")}</small><code title={tx.txid}>{tx.txid.slice(0, 12)}…{tx.txid.slice(-8)}</code><button className="tx-copy" aria-label={t("复制交易 ID")} title={t("复制交易 ID")} onClick={() => void copy(tx.txid)}><Icon name="copy" /></button></div>{tx.address && <div className="peer"><small>{t(tx.sent ? "去向" : "来源")}{payee(tx.address) && <strong>{payee(tx.address)}</strong>}</small><div className="peer-address"><code title={tx.address}>{tx.address.slice(0, 12)}…{tx.address.slice(-8)}</code><button className="peer-copy" aria-label={t("复制地址")} onClick={() => void copy(tx.address!)}>{t("复制")}</button></div></div>}</article>)}{view.snapshot?.hasMore && <button className="wide" disabled={busy} onClick={() => void act("refresh", { page: view.snapshot!.page + 1 })}>{t("加载更多")}</button>}</section>}
+      {tab === "wallet" && wallet && !readOnly && nockOn && <NockEntry key={`strip-${wallet.id}`} slot="strip" lang={lang} rpc={nockRpc} walletId={wallet.id} secondary={secondary} rates={market.rates} onOpen={() => { clearSecrets(); setNockOpen(true); }} />}
       {view.network === "mainnet" && wallet && !readOnly && canDonate(view.network, wallet.primaryAddress || wallet.address, wallet.address) && <button className="wide donate-entry" disabled={busy} onClick={startDonation}>{t("支持开发者")}</button>}
       {wallet && view.network === "mainnet" && webLink("wallet", wallet.address, view.network) && (ANDROID
         // In the app the monitor form is a tab away: open it with this address filled in.
@@ -648,19 +846,25 @@ function App() {
       </>}
       <footer>{t("本机加密 · 本机签名")} · PRL Wallet {chrome.runtime.getManifest().version}</footer>
     </main>}
-    <dialog ref={dialog} onCancel={close} onClick={(e) => { if (e.target === dialog.current && !busy) close(); }}><div className="dialog-inner"><div className="dialog-title"><h2>{({ create: t("创建钱包"), restore: t("恢复钱包"), receive: t("收款"), send: review ? t("确认转账") : t(recovery ? "找零归集" : "转账"), settings: t("钱包设置"), wallets: t("选择钱包"), backup: t("备份助记词"), retry: t("重试原交易"), discard: t("移除待确认记录"), contact: t(contactDraft.id ? "编辑联系人" : "新增联系人"), donate: t(review ? "确认捐赠" : "支持开发者"), security: securityCopy(lang).title, recover: ANDROID ? w.recoverTitle : "", tx: t("交易详情"), lookup: t("交易查询"), watch: t("只读钱包"), watchSend: t("只读钱包不能转账"), watchRemove: t("移除只读钱包"), nockClose: t("关闭 NOCK 钱包入口？") } as Record<string, string>)[panel || ""]}</h2><button className="icon-button" aria-label={t("关闭")} onClick={close}><Icon name="close" /></button></div>
-      {panel && notice}
-      {(panel === "create" || panel === "restore") && form((f) => {
-        if (panel === "create" && !quiz) { if (ANDROID) setQuizPick(makeQuiz(mnemonic.split(" "))); setQuiz(true); return; }
-        if (panel === "create" && ANDROID && quizPick) { const words = mnemonic.split(" "); if (quizPick.positions.some((i) => quizPick.chosen[i] !== words[i])) { setMessage(w.chooseWrong); return; } }
-        else if (panel === "create") { const words = mnemonic.split(" "); if ([2, 6, 10].some((i) => String(f.get(`word${i}`) || "").trim().toLowerCase() !== words[i])) { setMessage("备份核对未通过，请检查第 3、7、11 个单词。"); return; } }
-        if (ANDROID) { withSecret(t("保存钱包"), (secret) => void act("create", { name, mnemonic, password: secret }, () => { forgetPasted(); close(); }), !view?.exists); return; }
+    <dialog ref={dialog} onCancel={(e) => { if (!ANDROID) { close(); return; } e.preventDefault(); androidBack.current(); }} onClick={(e) => { if (e.target === dialog.current && !busy) dismiss(); }}><div className="dialog-inner"><div className="dialog-title">
+      {/* Android: back to the panel under this one (iOS navigation back), and 管理钱包's + (添加钱包). */}
+      {ANDROID && parents.length > 0 && <button className="icon-button dialog-back" aria-label={panelTitles[parents[parents.length - 1]]} title={panelTitles[parents[parents.length - 1]]} onClick={() => popPanel()}><Icon name="chevron" /></button>}
+      <h2>{panelTitles[panel || ""]}</h2>
+      {ANDROID && panel === "manage" && <button className="icon-button" aria-label={w.addWallet} title={w.addWallet} disabled={busy} onClick={() => openAdd(true)}><Icon name="plus" /></button>}
+      <button className="icon-button" aria-label={t("关闭")} onClick={dismiss}><Icon name="close" /></button></div>
+      {panel && !walletAlert && notice}
+      {ANDROID && panel === "add" && addPanel}
+      {ANDROID && panel === "create" && createPanel}
+      {ANDROID && panel === "restore" && restorePanel}
+      {ANDROID && panel === "manage" && managePanel}
+      {/* The extension's 创建钱包 / 恢复钱包 (the Android app has the iOS screens above). */}
+      {!ANDROID && (panel === "create" || panel === "restore") && form((f) => {
+        if (panel === "create" && !quiz) { setQuiz(true); return; }
+        if (panel === "create") { const words = mnemonic.split(" "); if ([2, 6, 10].some((i) => String(f.get(`word${i}`) || "").trim().toLowerCase() !== words[i])) { setMessage("备份核对未通过，请检查第 3、7、11 个单词。"); return; } }
         if (!view?.exists && password !== repeat) { setMessage("两次密码不一致。"); return; }
         void act("create", { name, mnemonic, password }, () => close());
-      }, <><label>{t("钱包名称")}<input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} required /></label>{panel === "create" ? <>{!quiz ? <div className="words">{mnemonic.split(" ").map((word, i) => <div key={i}><small>{i + 1}</small>{word}</div>)}</div> : ANDROID && quizPick ? <div className="quiz quiz-choices">{quizPick.positions.map((i, n) => <fieldset key={i}><legend>{fill(w.wordN, i + 1)}</legend><div>{quizPick.options[n].map((word) => <button type="button" key={word} aria-pressed={quizPick.chosen[i] === word} className={quizPick.chosen[i] === word ? "selected" : ""} onClick={() => setQuizPick((q) => q && { ...q, chosen: { ...q.chosen, [i]: word } })}>{word}</button>)}</div></fieldset>)}</div> : <div className="quiz">{[2, 6, 10].map((i) => <label key={i}>{t("第 {number} 个单词", { number: i + 1 })}<input name={`word${i}`} autoComplete="off" spellCheck={false} required /></label>)}</div>}{!quiz && <p className="notice seed-warning"><Icon name="warning" />{t("请离线手抄，切勿截图、拍照或复制——任何人拿到它都能转走你的资产。")}</p>}</> : <><label>{t("12 或 24 个英文助记词")}<textarea aria-label={t("助记词")} value={mnemonic} autoComplete="off" spellCheck={false} rows={4} onChange={(e) => setMnemonic(e.target.value)} required /></label>{ANDROID && <div className="phrase-tools"><small className={[12, 24].includes(wordCount(mnemonic)) ? "muted" : "phrase-count-off"}>{w.wordsEntered.replace("{count}", String(wordCount(mnemonic)))}</small><button type="button" onClick={() => void navigator.clipboard.readText().then((text) => { pasted.current = text; setMnemonic(text.trim()); }).catch(() => {})}><Icon name="copy" />{w.paste}</button></div>}</>}{(panel === "restore" || quiz) && ANDROID && confirmNote}{(panel === "restore" || quiz) && !ANDROID && <>{passwordField(view?.exists ? t("当前解锁密码") : t("设置解锁密码"), view?.exists ? undefined : t("请保存助记词。忘记密码后，需要助记词恢复钱包。"))}{!view?.exists && <label>{t("再次输入密码")}<input aria-label={t("再次输入密码")} type="password" autoComplete="new-password" minLength={10} value={repeat} onChange={(e) => setRepeat(e.target.value)} required /><small>{t("至少 10 个字符，用于加密本机钱包。")}</small></label>}</>}<button className="primary wide" disabled={busy || panel === "create" && !mnemonic || ANDROID && panel === "restore" && ![12, 24].includes(wordCount(mnemonic)) || ANDROID && panel === "create" && quiz && !!quizPick && quizPick.positions.some((i) => !quizPick.chosen[i])}>{busy ? t("正在保存…") : panel === "create" && !quiz ? t("我已保存，核对备份") : t("保存钱包")}</button></>)}
-      {panel === "wallets" && <div className="wallet-list">{view?.wallets?.map((item) => <div className={ANDROID ? "wallet-row" : undefined} key={item.id}><button className={item.id === view.selected ? "wallet-choice selected" : "wallet-choice"} data-wallet-id={item.id} aria-pressed={item.id === view.selected} disabled={busy} onClick={() => { close(); if (item.id !== view.selected) void act("select", { id: item.id }); }}><Icon name={item.watch ? "eye" : "wallet"} /><span><strong>{item.name}</strong><small>{item.watch && `${t("只读")} · `}{item.address.slice(0, 12)}…{item.address.slice(-6)}</small></span>{item.id === view.selected && <Icon name="check" />}</button>
-        {/* iOS 管理钱包: rename or delete any wallet without switching to it first (delete keeps the confirmation flow). */}
-        {ANDROID && <details className="wallet-row-menu"><summary aria-label={w.rename}><Icon name="more" /></summary><button disabled={busy} onClick={() => { const name = prompt(w.rename, item.name)?.trim(); if (name) void act("rename", { id: item.id, name }); }}>{w.rename}</button><button className="danger-button" disabled={busy} onClick={() => { if (item.watch) { clearSecrets(); setWatchTarget(item); setPanel("watchRemove"); return; } close(); const open = () => { setName(item.name); setPanel("settings"); }; if (item.id === view.selected) open(); else void act("select", { id: item.id }, open); }}>{w.delete}</button></details>}
+      }, <><label>{t("钱包名称")}<input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} required /></label>{panel === "create" ? <>{!quiz ? <div className="words">{mnemonic.split(" ").map((word, i) => <div key={i}><small>{i + 1}</small>{word}</div>)}</div> : <div className="quiz">{[2, 6, 10].map((i) => <label key={i}>{t("第 {number} 个单词", { number: i + 1 })}<input name={`word${i}`} autoComplete="off" spellCheck={false} required /></label>)}</div>}{!quiz && <p className="notice seed-warning"><Icon name="warning" />{t("请离线手抄，切勿截图、拍照或复制——任何人拿到它都能转走你的资产。")}</p>}</> : <label>{t("12 或 24 个英文助记词")}<textarea aria-label={t("助记词")} value={mnemonic} autoComplete="off" spellCheck={false} rows={4} onChange={(e) => setMnemonic(e.target.value)} required /></label>}{(panel === "restore" || quiz) && <>{passwordField(view?.exists ? t("当前解锁密码") : t("设置解锁密码"), view?.exists ? undefined : t("请保存助记词。忘记密码后，需要助记词恢复钱包。"))}{!view?.exists && <label>{t("再次输入密码")}<input aria-label={t("再次输入密码")} type="password" autoComplete="new-password" minLength={10} value={repeat} onChange={(e) => setRepeat(e.target.value)} required /><small>{t("至少 10 个字符，用于加密本机钱包。")}</small></label>}</>}<button className="primary wide" disabled={busy || panel === "create" && !mnemonic}>{busy ? t("正在保存…") : panel === "create" && !quiz ? t("我已保存，核对备份") : t("保存钱包")}</button></>)}
+      {panel === "wallets" && <div className="wallet-list">{view?.wallets?.map((item) => <div key={item.id}><button className={item.id === view.selected ? "wallet-choice selected" : "wallet-choice"} data-wallet-id={item.id} aria-pressed={item.id === view.selected} disabled={busy} onClick={() => { close(); if (item.id !== view.selected) void act("select", { id: item.id }); }}><Icon name={item.watch ? "eye" : "wallet"} /><span><strong>{item.name}</strong><small>{item.watch && `${t("只读")} · `}{item.address.slice(0, 12)}…{item.address.slice(-6)}</small></span>{item.id === view.selected && <Icon name="check" />}</button>
       </div>)}</div>}
       {panel === "receive" && wallet && <div className="receive"><QR value={wallet.address} alt={t("收款地址二维码")} /><code>{wallet.address}</code><p>{t("仅接收 {network} PRL。", { network: view?.network === "mainnet" ? t("主网") : t("测试网") })}</p><button className="primary wide" onClick={() => void copy(wallet.address)}>{t("复制收款地址")}</button>{!wallet.watch && <><div className="receive-rotate"><button className="wide" disabled={busy} onClick={() => void act("receive")}>{t("换一个收款地址")}</button><InfoTip label={t("说明")} text={t("轮换地址仍属于同一个钱包，余额会合并统计。")} /></div>{ANDROID && !!wallet.index && <button className="wide" disabled={busy} onClick={() => void act("receive-main")}><Icon name="wallet" />{w.mainAddress}</button>}</>}</div>}
       {panel === "contact" && form(() => { void act("contact-save", contactDraft, finishContact); }, <><label>{t("名称")}<input aria-label={t("名称")} value={contactDraft.name} onChange={(e) => setContactDraft({ ...contactDraft, name: e.target.value })} /></label><label>{t("地址")}<input aria-label={t("地址")} value={contactDraft.address} autoComplete="off" spellCheck={false} onChange={(e) => setContactDraft({ ...contactDraft, address: e.target.value })} required placeholder={view?.network === "mainnet" ? "prl1…" : "tprl1…"} /></label><label>{t("备注（可选）")}<textarea aria-label={t("备注（可选）")} value={contactDraft.note} onChange={(e) => setContactDraft({ ...contactDraft, note: e.target.value })} /></label><button className="primary wide" disabled={busy}>{t("保存")}</button><button type="button" className="wide" disabled={busy} onClick={finishContact}>{t("取消")}</button>{contactDraft.id && <button type="button" className="danger-button wide" disabled={busy} onClick={() => void act("contact-remove", { id: contactDraft.id }, finishContact)}>{t("删除联系人")}</button>}</>)}
@@ -708,7 +912,7 @@ function App() {
       </>)}
       {panel === "watchSend" && <div className="alert-panel"><p>{t("只读钱包只保存地址，没有私钥。要从这个地址转账，请用它所属钱包的助记词恢复。")}</p><button className="primary wide" onClick={() => start("restore")}>{t("用助记词恢复钱包")}</button><button className="wide" onClick={close}>{t("知道了")}</button></div>}
       {panel === "watchRemove" && watchTarget && <div className="alert-panel"><p><strong>{watchTarget.name}</strong></p><p>{t("只从本机删除这个地址，不影响链上资产，之后可以再添加。")}</p><button className="danger-button wide" disabled={busy} onClick={() => removeWatch(watchTarget)}>{t("移除只读钱包")}</button><button className="wide" disabled={busy} onClick={close}>{t("取消")}</button></div>}
-      {panel === "nockClose" && <div className="alert-panel"><p>{t(ANDROID ? "钱包页不再显示 NOCK 钱包，之后可以在「设置 → 钱包与安全」重新打开。" : "钱包页不再显示 NOCK 钱包，之后可以在「钱包设置」重新打开。")}</p><button className="primary wide" onClick={() => { setNockLink(false); close(); }}>{t("关闭")}</button><button className="wide" onClick={close}>{t("取消")}</button></div>}
+      {panel === "nockClose" && <div className="alert-panel"><p>{t("钱包页不再显示 NOCK 钱包，之后可以在「钱包设置」重新打开。")}</p><button className="primary wide" onClick={() => { setNockLink(false); close(); }}>{t("关闭")}</button><button className="wide" onClick={close}>{t("取消")}</button></div>}
       {panel === "settings" && <>
         <section className="setting preferences-setting">
           {!ANDROID && <div className="preferences-grid">
@@ -717,8 +921,9 @@ function App() {
           </div>}
           {view?.exists && !view.locked && <label>{t("钱包网络")}<select aria-label={t("钱包网络")} value={view.network} disabled={busy} onChange={(e) => { close(); void act("network", { network: e.target.value }); }}><option value="mainnet">{t("主网")}</option><option value="testnet">{t("测试网")}</option></select></label>}
         </section>
-        {!ANDROID && <section className="setting account-setting"><h3 className="title-tip">{accountCopy(lang).account}<InfoTip label={accountCopy(lang).account} title={accountCopy(lang).account} text={`${accountCopy(lang).intro}\n\n${accountCopy(lang).privacy}`} /></h3>{contactLink.connected ? <><p className="account-email">{contactLink.email}</p>{!contactLink.pro && <p className="muted">{accountCopy(lang).syncRequiresPro}</p>}<div className="account-actions"><button disabled={busy || view?.locked || !contactLink.pro} onClick={() => void act<typeof contactLink>("contact-sync", {}, setContactLink)}>{t("立即同步")}</button><button disabled={busy} onClick={() => void act<typeof contactLink>("account-logout", {}, setContactLink)}>{accountCopy(lang).logout}</button></div><div className="account-links"><a href="https://pearlhub.net/?account=manage#market" target="_blank" rel="noreferrer">{accountCopy(lang).devices}</a><a href="https://pearlhub.net/?account=manage#market" target="_blank" rel="noreferrer">{accountCopy(lang).rights}</a></div>{contactLink.lastSync && <small className="account-sync-time">{new Date(contactLink.lastSync).toLocaleString(lang)}</small>}</> : <button disabled={busy} onClick={() => void act<typeof contactLink>("account-login", { importLocal: confirm(accountCopy(lang).import) }, setContactLink)}>{accountCopy(lang).login}</button>}</section>}{view?.exists && !view.locked && wallet && <><section className="setting">{form(() => { void act("rename", { name }, () => setMessage("钱包名称已更新。")); }, <><label>{t("钱包名称")}<input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} required /></label><button disabled={busy}>{t("保存名称")}</button></>)}{!ANDROID && nockSwitch && <label className="switch-row"><span>{t("在钱包页显示 NOCK 钱包")}</span><input type="checkbox" role="switch" checked={!nockLinkHidden} onChange={(e) => setNockLink(e.target.checked)} /></label>}</section>{!ANDROID && <section className="setting"><h3>{t("更换解锁密码")}</h3>{form(() => { if (nextPassword !== repeat) { setMessage("两次新密码不一致。"); return; } void act("password", { password, nextPassword }, () => { clearSecrets(); setMessage("密码已更新。此密码保护插件中的所有钱包。"); }); }, <>{passwordField(t("当前解锁密码"))}<label>{t("新密码")}<input type="password" minLength={10} autoComplete="new-password" value={nextPassword} onChange={(e) => setNextPassword(e.target.value)} required /></label><label>{t("再次输入新密码")}<input type="password" value={repeat} onChange={(e) => setRepeat(e.target.value)} required /></label><button disabled={busy}>{t("更新密码")}</button></>)}</section>}</>}{!ANDROID && <section className="setting security-setting"><h3>{securityCopy(lang).group}</h3><button className="security-entry" onClick={() => { clearSecrets(); dialog.current?.scrollTo({ top: 0 }); setPanel("security"); }}><Icon name="shield" /><span>{securityCopy(lang).title}</span><Icon name="chevron" className="security-entry-chevron" /></button></section>}{!ANDROID && <SecurityNotice lang={lang} />}{view?.exists && !view.locked && wallet && readOnly && <section className="setting"><button className="danger-button wide" disabled={busy} onClick={() => { clearSecrets(); setWatchTarget(wallet); setPanel("watchRemove"); }}>{t("移除只读钱包")}</button></section>}{view?.exists && !view.locked && wallet && !readOnly && <details className="setting danger"><summary>{ANDROID ? w.removeTitle : t("从这台浏览器移除当前钱包")}</summary><p>{t("移除只删除本机记录。请先备份助记词，链上资金不会自动转出。")}</p>{form((f) => { const name = String(f.get("name") || ""), remove = (password: string) => void act<View>("delete", { password, name }, (r) => { close(); if (ANDROID && !r.exists) void forgetDeviceSecret(); }); if (ANDROID) withSecret(t("移除钱包"), remove); else remove(String(f.get("password") || "")); }, <><label>{t("输入钱包名称“{name}”", { name: wallet?.name ?? "" })}<input name="name" autoComplete="off" required /></label>{ANDROID ? confirmNote : <label>{t("解锁密码")}<input name="password" type="password" autoComplete="current-password" required /></label>}<button className="danger-button" disabled={busy}>{t("移除钱包")}</button></>)}</details>}</>}
+        {!ANDROID && <section className="setting account-setting"><h3 className="title-tip">{accountCopy(lang).account}<InfoTip label={accountCopy(lang).account} title={accountCopy(lang).account} text={`${accountCopy(lang).intro}\n\n${accountCopy(lang).privacy}`} /></h3>{contactLink.connected ? <><p className="account-email">{contactLink.email}</p>{!contactLink.pro && <p className="muted">{accountCopy(lang).syncRequiresPro}</p>}<div className="account-actions"><button disabled={busy || view?.locked || !contactLink.pro} onClick={() => void act<typeof contactLink>("contact-sync", {}, setContactLink)}>{t("立即同步")}</button><button disabled={busy} onClick={() => void act<typeof contactLink>("account-logout", {}, setContactLink)}>{accountCopy(lang).logout}</button></div><div className="account-links"><a href="https://pearlhub.net/?account=manage#market" target="_blank" rel="noreferrer">{accountCopy(lang).devices}</a><a href="https://pearlhub.net/?account=manage#market" target="_blank" rel="noreferrer">{accountCopy(lang).rights}</a></div>{contactLink.lastSync && <small className="account-sync-time">{new Date(contactLink.lastSync).toLocaleString(lang)}</small>}</> : <button disabled={busy} onClick={() => void act<typeof contactLink>("account-login", { importLocal: confirm(accountCopy(lang).import) }, setContactLink)}>{accountCopy(lang).login}</button>}</section>}{view?.exists && !view.locked && wallet && <><section className="setting">{form(() => { void act("rename", { name }, () => setMessage("钱包名称已更新。")); }, <><label>{t("钱包名称")}<input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} required /></label><button disabled={busy}>{t("保存名称")}</button></>)}{!ANDROID && nockSwitch && <label className="switch-row"><span>{t("在钱包页显示 NOCK 钱包")}</span><input type="checkbox" role="switch" checked={!nockLinkHidden} onChange={(e) => setNockLink(e.target.checked)} /></label>}</section>{!ANDROID && <section className="setting"><h3>{t("更换解锁密码")}</h3>{form(() => { if (nextPassword !== repeat) { setMessage("两次新密码不一致。"); return; } void act("password", { password, nextPassword }, () => { clearSecrets(); setMessage("密码已更新。此密码保护插件中的所有钱包。"); }); }, <>{passwordField(t("当前解锁密码"))}<label>{t("新密码")}<input type="password" minLength={10} autoComplete="new-password" value={nextPassword} onChange={(e) => setNextPassword(e.target.value)} required /></label><label>{t("再次输入新密码")}<input type="password" value={repeat} onChange={(e) => setRepeat(e.target.value)} required /></label><button disabled={busy}>{t("更新密码")}</button></>)}</section>}</>}{!ANDROID && <section className="setting security-setting"><h3>{securityCopy(lang).group}</h3><button className="security-entry" onClick={() => { clearSecrets(); dialog.current?.scrollTo({ top: 0 }); setPanel("security"); }}><Icon name="shield" /><span>{securityCopy(lang).title}</span><Icon name="chevron" className="security-entry-chevron" /></button></section>}{!ANDROID && <SecurityNotice lang={lang} />}{/* Android: one button to the same alert as 管理钱包's 删除 (iOS 设置 → 移除钱包). */}{view?.exists && !view.locked && wallet && (readOnly || ANDROID) && <section className="setting"><button className="danger-button wide" disabled={busy} onClick={() => { if (ANDROID) { askRemove(wallet); return; } clearSecrets(); setWatchTarget(wallet); setPanel("watchRemove"); }}>{readOnly ? t("移除只读钱包") : w.removeTitle}</button></section>}{view?.exists && !view.locked && wallet && !readOnly && !ANDROID && <details className="setting danger"><summary>{t("从这台浏览器移除当前钱包")}</summary><p>{t("移除只删除本机记录。请先备份助记词，链上资金不会自动转出。")}</p>{form((f) => { const name = String(f.get("name") || ""); void act<View>("delete", { password: String(f.get("password") || ""), name }, () => close()); }, <><label>{t("输入钱包名称“{name}”", { name: wallet?.name ?? "" })}<input name="name" autoComplete="off" required /></label><label>{t("解锁密码")}<input name="password" type="password" autoComplete="current-password" required /></label><button className="danger-button" disabled={busy}>{t("移除钱包")}</button></>)}</details>}</>}
     </div></dialog>
+    {walletAlertBox}
   </div>;
 }
 createRoot(document.getElementById("root")!).render(<App />);

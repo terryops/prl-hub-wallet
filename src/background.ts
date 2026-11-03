@@ -276,6 +276,13 @@ async function handle(m: Message, epoch: number) {
     let data: VaultData;
     if (e) { await session(); data = await passwordData(text(m.password)); }
     else data = { wallets: [], selected: "", network: "mainnet", pending: [] };
+    // The Android app, as iOS's commitWallet: a phrase that is already here opens that wallet instead.
+    const existing = ANDROID ? data.wallets.find((w) => w.mnemonic === mnemonic) : undefined;
+    if (existing) {
+      stillActive();
+      if (data.selected !== existing.id) { data.selected = existing.id; await save(data); await chrome.storage.session.remove([SNAPSHOT, REVIEW]); }
+      return { ...await status(), existing: existing.name };
+    }
     if (data.wallets.length >= 10) throw new Error("最多管理 10 个钱包。");
     if (data.wallets.some((w) => w.mnemonic === mnemonic)) throw new Error("这个钱包已经添加。");
     const id = crypto.randomUUID(), added: Wallet = { id, name, mnemonic, receiveIndex: 0 };
@@ -358,13 +365,17 @@ async function handle(m: Message, epoch: number) {
   if (m.command === "delete") {
     await passwordData(text(m.password));
     stillActive(); await session();
-    if (text(m.name) !== w.name) throw new Error("请输入准确的钱包名称。");
-    if (data.pending.some((p) => p.walletId === w.id)) throw new Error("此钱包仍有待确认交易，请先核对链上状态。");
-    data.wallets = data.wallets.filter((x) => x.id !== w.id);
+    // The Android app's 管理钱包 removes any wallet without opening it first, as iOS's does; otherwise the selected one.
+    const target = ANDROID && m.id ? data.wallets.find((x) => x.id === m.id) : w;
+    if (!target) throw new Error("钱包不存在。");
+    if (text(m.name) !== target.name) throw new Error("请输入准确的钱包名称。");
+    if (data.pending.some((p) => p.walletId === target.id)) throw new Error("此钱包仍有待确认交易，请先核对链上状态。");
+    data.wallets = data.wallets.filter((x) => x.id !== target.id);
     if (!data.wallets.length) { await chrome.storage.local.remove(VAULT); await nockForgetAll(); return lock(); }
-    data.selected = data.wallets[0].id; await save(data); await chrome.storage.session.remove([SNAPSHOT, REVIEW]);
+    if (data.selected === target.id) { data.selected = data.wallets[0].id; await save(data); await chrome.storage.session.remove([SNAPSHOT, REVIEW]); }
+    else await save(data);
     // The same seed's NOCK side goes with it: its address, history and sends in flight.
-    await nockForget(w.id);
+    await nockForget(target.id);
     return status();
   }
   if (m.command === "password") {

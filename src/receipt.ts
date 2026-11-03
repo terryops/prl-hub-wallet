@@ -13,6 +13,16 @@ export function addressGroups(address: string) {
   return groups;
 }
 
+/// The groups in lines set up front at `perLine` each, spread evenly: 14 groups at 5 → 5 / 5 / 4, not
+/// 6 / 6 / 2 (iOS Text(groupedAddress:perLine:)), for a centred address. A line too wide still wraps between groups.
+export function addressLines(address: string, perLine: number) {
+  const groups = addressGroups(address);
+  const each = Math.max(1, Math.ceil(groups.length / Math.ceil(groups.length / perLine)));
+  const lines: string[][] = [];
+  for (let i = 0; i < groups.length; i += each) lines.push(groups.slice(i, i + each));
+  return lines;
+}
+
 /// Atoms as PRL, grouped like the balance (1,234.5), with up to the chain's 8 decimals and no trailing zeros.
 export function receiptAmount(value: string | bigint, locale: string) {
   const atoms = BigInt(value), [whole, fraction] = formatAmount(atoms < 0n ? -atoms : atoms).split(".");

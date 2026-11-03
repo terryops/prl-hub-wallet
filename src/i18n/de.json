@@ -365,5 +365,7 @@
   "钱包页不再显示 NOCK 钱包，之后可以在「钱包设置」重新打开。": "Die NOCK-Wallet wird auf der Wallet-Seite nicht mehr angezeigt. Unter „Wallet-Einstellungen“ kannst du sie wieder einblenden.",
   "在钱包页显示 NOCK 钱包": "NOCK-Wallet auf der Wallet-Seite zeigen",
   "请离线手抄，切勿截图、拍照或复制——任何人拿到它都能转走你的资产。": "Schreib sie offline auf; mach niemals Screenshots oder Fotos davon und kopiere sie nicht – wer sie hat, kann dein Guthaben abziehen.",
-  "Pearl Hub 是开源项目，全部代码公开在 GitHub，没有广告和追踪。基础功能一直免费，捐赠和高级版的收入用来支付服务器和节点费用、维持更新。": "Pearl Hub ist Open Source – der gesamte Code ist öffentlich auf GitHub, ohne Werbung und ohne Tracking. Die Grundfunktionen bleiben kostenlos; Spenden und Pro-Käufe bezahlen Server und Nodes und halten die App aktuell."
+  "Pearl Hub 是开源项目，全部代码公开在 GitHub，没有广告和追踪。基础功能一直免费，捐赠和高级版的收入用来支付服务器和节点费用、维持更新。": "Pearl Hub ist Open Source – der gesamte Code ist öffentlich auf GitHub, ohne Werbung und ohne Tracking. Die Grundfunktionen bleiben kostenlos; Spenden und Pro-Käufe bezahlen Server und Nodes und halten die App aktuell.",
+  "已复制": "Kopiert",
+  "分享": "Teilen"
 }

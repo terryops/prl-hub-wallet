@@ -1,6 +1,6 @@
 {
   "name": "pearl-hub-wallet",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,6 +9,7 @@
     "test": "node --experimental-strip-types --test test/*.test.ts",
     "qa": "node test/browser.mjs && node test/features.mjs && node test/review-ui.mjs && node test/transactions.mjs && node test/nock.mjs",
     "qa:review": "npm run build && node test/review-ui.mjs",
+    "qa:android": "npm run build:android && node test/android-wallets.mjs",
     "package": "npm run build && python3 package.py",
     "qa:languages": "node test/languages.mjs",
     "typecheck": "tsc --noEmit",
@@ -40,6 +41,7 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@types/chrome": "0.1.38",
+    "jsqr": "1.4.0",
     "playwright": "1.58.2"
   },
   "license": "MIT",

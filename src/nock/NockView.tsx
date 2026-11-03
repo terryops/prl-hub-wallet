@@ -2,12 +2,13 @@
 // as in the native app (prl-hub Sources/Wallet/NockWallet.swift). Reached from the wallet page: a
 // one-line link at the bottom, or a small strip under the wallet's tools once the wallet uses NOCK.
 // Everything chain-related runs in the background (nock/service.ts); this file only shows it.
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import qrcode from "qrcode-generator";
 import { Icon } from "../Icons.tsx";
+import { iconSymbols } from "../icon-symbols.tsx";
 import { dictionaries, messageText, translate, type Lang, type TextKey } from "../i18n/index.ts";
 import { dualFiat } from "../market.ts";
-import { addressGroups } from "../receipt.ts";
+import { addressGroups, addressLines } from "../receipt.ts";
 import { formatNock, nockNumber, parseNock, TYPED_DECIMALS } from "./units.ts";
 import { loadNockPrice } from "./price.ts";
 import { CLI_NODE_PERMISSION } from "./nodes.ts";
@@ -87,14 +88,68 @@ function SecondNodeOffer({ t, onAllowed }: { t: (key: TextKey) => string; onAllo
   </div></div>;
 }
 
-function QR({ value, alt }: { value: string; alt: string }) {
-  const code = qrcode(0, "M"); code.addData(value); code.make();
-  return <img className="qr" src={code.createDataURL(5, 10)} alt={alt} />;
+/// The code as SVG on its own white plate, so it scans in dark mode too (iOS NockReceiveView.code). `mark` puts the
+/// NOCK hexagon on a white rounded square in the middle, so the code can't pass for the PRL one; level-Q
+/// correction ("Q" / "H" survive ~25% / ~30% of the code covered) carries it. Decorative for screen readers: the
+/// address under it is the accessible part.
+function QR({ value, correction = "M", mark = false }: { value: string; correction?: "L" | "M" | "Q" | "H"; mark?: boolean }) {
+  const code = qrcode(0, correction); code.addData(value); code.make();
+  // A two-module quiet zone inside the plate's own padding.
+  const n = code.getModuleCount(), side = n + 4;
+  let modules = "";
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    if (!code.isDark(r, c) || c > 0 && code.isDark(r, c - 1)) continue;
+    let run = 1; while (c + run < n && code.isDark(r, c + run)) run++;
+    modules += `M${c + 2} ${r + 2}h${run}v1h-${run}z`;
+  }
+  // As iOS: the square a fifth of the code's side, its corners a twentieth, the hexagon about 11% tall.
+  const box = side * 0.2, glyph = side * 0.13;
+  return <div className="nock-qr"><svg viewBox={`0 0 ${side} ${side}`} aria-hidden="true" focusable="false">
+    <rect width={side} height={side} fill="#fff" />
+    <path d={modules} fill="#000" shapeRendering="crispEdges" />
+    {mark && <g>
+      <rect x={(side - box) / 2} y={(side - box) / 2} width={box} height={box} rx={side * 0.05} fill="#fff" />
+      <svg x={(side - glyph) / 2} y={(side - glyph) / 2} width={glyph} height={glyph} viewBox="0 0 512 512" fill="#000">{iconSymbols.hexagon}</svg>
+    </g>}
+  </svg></div>;
+}
+
+/// 收 NOCK, as iOS NockReceiveView: one card (the chain with its ⓘ, the code, the address in 4-character groups,
+/// which copies on a tap) and under it a slim bar like the page's 收款 · 转账 · 记录: 复制地址 · 分享. 分享
+/// shows only where there is a share sheet to open.
+function NockReceive({ address, t, copy, share }: { address: string; t: (key: TextKey) => string; copy: (text: string, quiet?: boolean) => Promise<boolean>; share?: (text: string) => void }) {
+  const [copied, setCopied] = useState(false), timer = useRef<ReturnType<typeof setTimeout>>(undefined), id = useId();
+  useEffect(() => () => clearTimeout(timer.current), []);
+  // The bar says 已复制 for two seconds instead of a message on the page behind; a failure still shows there.
+  const copyAddress = () => void copy(address, true).then((ok) => {
+    if (!ok) return;
+    clearTimeout(timer.current); setCopied(true);
+    timer.current = setTimeout(() => setCopied(false), 2000);
+  });
+  const lines = addressLines(address, 5), last = lines.length - 1;
+  return <>
+    <section className="nock-receive-card">
+      <div className="nock-receive-chain">Nockchain<InfoTip label={t("NOCK 收款地址 · Nockchain 主网")} title={t("NOCK 收款地址 · Nockchain 主网")} text={t("这个地址只收 NOCK，别往这里转 PRL。")} /></div>
+      <QR value={address} correction="Q" mark />
+      <button type="button" className="nock-receive-address" aria-label={t("复制收款地址")} aria-describedby={id} onClick={copyAddress}>
+        <code>{lines.map((line, l) => <span key={l}>{line.map((group, g) => <span key={g} className={l === 0 && g === 0 || l === last && g === line.length - 1 ? "edge" : undefined}>{group}</span>)}</span>)}</code>
+      </button>
+      <span id={id} hidden>{address}</span>
+    </section>
+    <div className="nock-actions nock-receive-bar">
+      <button type="button" onClick={copyAddress}><Icon name={copied ? "check" : "copy"} /><span>{copied ? t("已复制") : t("复制地址")}</span></button>
+      {share && <button type="button" onClick={() => share(address)}><Icon name="share" /><span>{t("分享")}</span></button>}
+    </div>
+    <span className="sr-only" role="status">{copied ? t("已复制") : ""}</span>
+  </>;
 }
 
 type Panel = "receive" | "send" | "history" | "tx" | null;
 type Props = Common & {
-  copy: (text: string) => void;
+  /// Resolves to whether it reached the clipboard; `quiet` leaves out the page's 已复制 message.
+  copy: (text: string, quiet?: boolean) => Promise<boolean>;
+  /// The share sheet with this text (the app's on Android, the browser's navigator.share); none: no 分享.
+  share?: (text: string) => void;
   onBack: () => void;
   /// Android: the vault secret comes from the lock screen instead of a typed password.
   android: boolean;
@@ -105,7 +160,7 @@ type Props = Common & {
 };
 
 /// The NOCK page: balance, receive, send and the merged nockscan/local history.
-export function NockPage({ lang, rpc, walletId, secondary, rates, copy, onBack, android, secret, confirmNote, backHandler }: Props) {
+export function NockPage({ lang, rpc, walletId, secondary, rates, copy, share, onBack, android, secret, confirmNote, backHandler }: Props) {
   const { t, text, nock } = useText(lang);
   const [status, setStatus] = useState<NockView | null>(null), [usd, setUsd] = useState<number>();
   const [refreshing, setRefreshing] = useState(false), [toast, setToast] = useState(""), [panel, setPanel] = useState<Panel>(null), [txId, setTxId] = useState("");
@@ -247,14 +302,11 @@ export function NockPage({ lang, rpc, walletId, secondary, rates, copy, onBack, 
     {/* One quiet caption line on this deliberately quiet page; the detail sits in the ⓘ (iOS 6a1e720). */}
     <footer className="nock-seed-note"><span><Icon name="key" />{t("和 PRL 共用助记词")}</span><InfoTip label={t("和 PRL 共用助记词")} title={t("和 PRL 共用助记词")} text={t("用的是同一套助记词：在 Nockchain 官方钱包或 Iris 钱包导入它，会看到同一个 NOCK 地址。")} /></footer>
 
-    <dialog ref={dialog} className="nock-dialog" onCancel={(e) => { e.preventDefault(); if (!sending) closePanel(); }} onClick={(e) => { if (e.target === dialog.current && !sending && !preparing) closePanel(); }}><div className="dialog-inner">
+    <dialog ref={dialog} className={panel === "receive" ? "nock-dialog narrow" : "nock-dialog"} onCancel={(e) => { e.preventDefault(); if (!sending) closePanel(); }} onClick={(e) => { if (e.target === dialog.current && !sending && !preparing) closePanel(); }}><div className="dialog-inner">
       <div className="dialog-title"><h2>{panel === "history" ? t("NOCK 记录") : panel === "receive" ? t("收 NOCK") : panel === "send" ? prepared ? t("确认转账") : t("转 NOCK") : t("交易详情")}</h2><button className="icon-button" aria-label={t("关闭")} disabled={sending} onClick={closePanel}><Icon name="close" /></button></div>
       {panel === "history" && <section className="nock-history">{status.history.length ? status.history.map(row) : <p className="empty">{t("暂无交易记录")}</p>}</section>}
 
-      {panel === "receive" && <div className="receive">
-        {status.address ? <><QR value={status.address} alt={t("NOCK 收款地址 · Nockchain 主网")} /><p className="nock-receive-label">{t("NOCK 收款地址 · Nockchain 主网")}<InfoTip label={t("说明")} text={t("这个地址只收 NOCK，别往这里转 PRL。")} /></p><code>{status.address}</code>
-          <button className="primary wide" onClick={() => copy(status.address!)}><Icon name="copy" />{t("复制地址")}</button></> : <p>{t("派生地址…")}</p>}
-      </div>}
+      {panel === "receive" && (status.address ? <NockReceive address={status.address} t={t} copy={copy} share={share} /> : <p className="empty">{t("派生地址…")}</p>)}
 
       {panel === "send" && !prepared && <form onSubmit={(e) => { e.preventDefault(); void prepare(); }}>
         <p className="nock-available">{status.hasBalance ? t("可用余额 {amount}", { amount: nock(balance.available) }) : t("同步余额…")}</p>

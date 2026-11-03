@@ -84,7 +84,7 @@ try {
     await button(l,'钱包设置').click();await fits(`${l}: settings`);await button(l,'关闭').click();
     await button(l,'备份助记词').click();await page.getByLabel(texts[l]['解锁密码'],{exact:true}).fill('public-test-password');await button(l,'查看助记词').click();await page.waitForFunction(()=>document.querySelectorAll('.words>div').length===12);
     assert.equal((await page.locator('.words>div').allTextContents()).map(x=>x.replace(/^\d+/,'')).join(' '),vectors.mnemonic);await button(l,'已保存，关闭').click();
-    await button(l,'锁定钱包').click();await page.getByRole('heading',{name:texts[l]['钱包已锁定'],exact:true}).waitFor();await fits(`${l}: locked`);
+    await button(l,'锁定钱包').click();await page.locator('main.locked h1').filter({hasText:texts[l]['钱包已锁定']}).waitFor();await fits(`${l}: locked`);
     await page.reload();await page.waitForFunction(l=>document.documentElement.lang===l,l);
     await page.getByLabel(texts[l]['解锁密码'],{exact:true}).fill('wrong-password');await button(l,'解锁钱包').click();await page.getByRole('status').filter({hasText:texts[l]['密码错误或钱包文件损坏。']}).waitFor();
     await page.getByLabel(texts[l]['解锁密码'],{exact:true}).fill('public-test-password');await button(l,'解锁钱包').click();await page.locator('.balance').waitFor();

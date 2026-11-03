@@ -17,6 +17,8 @@ import * as receipt from "../src/receipt.ts";
 import androidCopy from "../src/android/copy.json" with { type: "json" };
 const vectors = JSON.parse(readFileSync(new URL("./native-vectors.json", import.meta.url), "utf8"));
 const compiled = ts.transpileModule(readFileSync(new URL("../src/main.tsx", import.meta.url), "utf8"), { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
+// A BIP39 test vector with eleven different words, for the phrase check.
+const PHRASE = "legal winner thank year wave sausage worth useful legal winner thank yellow";
 const base = { exists: true, locked: false, selected: "one", network: "mainnet", wallets: [{ id: "one", name: "A", address: vectors.addresses[0], primaryAddress: vectors.addresses[0], index: 0 }], pending: [] };
 type Element = { type: any; props: any };
 function mount(view: any = base, raw: any[] = [], android?: { deviceSecret: (title: string) => Promise<string> }) {
@@ -28,11 +30,11 @@ function mount(view: any = base, raw: any[] = [], android?: { deviceSecret: (tit
     useRef(initial: any) { const at = cursor++; return hooks[at] ||= { current: initial }; }, useEffect() {},
   };
   vm.runInNewContext(compiled, {
-    exports: {}, URLSearchParams, FormData: class { get() { return null; } }, document: { getElementById: () => ({}) }, navigator: { languages: ["zh-CN"] },
+    exports: {}, URLSearchParams, crypto, FormData: class { get() { return null; } }, document: { getElementById: () => ({}) }, navigator: { languages: ["zh-CN"] },
     // The Android build: main.tsx reads __PEARL_ANDROID__, and the vault password comes from the shell's fingerprint prompt.
     __PEARL_ANDROID__: !!android,
     chrome: { i18n: { getUILanguage: () => "zh-CN" }, runtime: { getManifest: () => ({ version: "0.2.0" }), async sendMessage(message: any) {
-      calls.push(message); return { ok: true, data: message.command === "fee" ? { fee: 50000, estimated: true } : message.donation ? { id: "review", to: donation.DONATION_ADDRESS, donation: true, network: "mainnet", amount: "500000000", fee: "12300", change: "1000" } : { id: "send", to: vectors.cases[0].to, network: "mainnet", amount: "123456789000", fee: "600000", change: "0" } };
+      calls.push(message); return { ok: true, data: message.command === "generate" ? { mnemonic: PHRASE } : ["select", "rename", "watch-remove", "delete"].includes(message.command) ? view : message.command === "fee" ? { fee: 50000, estimated: true } : message.donation ? { id: "review", to: donation.DONATION_ADDRESS, donation: true, network: "mainnet", amount: "500000000", fee: "12300", change: "1000" } : { id: "send", to: vectors.cases[0].to, network: "mainnet", amount: "123456789000", fee: "600000", change: "0" } };
     } } },
     require: (name: string) => name === "react" ? React : name === "react-dom/client" ? { createRoot: () => ({ render: (element: Element) => { root = element; } }) } : android && name.includes("android/native.ts") ? { ...android, walletCopy: () => ({ ...androidCopy["zh-Hans"], confirmNote: "Fingerprint" }), secureScreen() {}, forgetDeviceSecret: async () => {}, openSecuritySettings() {}, publishWalletWidget() {}, BridgeError: class extends Error {} } : android && name.includes("android-host.ts") ? { pearlHost: () => undefined } : name.includes("UpdateBanner.tsx") ? { useAndroidUpdate: () => ({ latest: undefined, dismiss() {} }), UpdateBanner: "UpdateBanner" } : name.includes("SendReceipt.tsx") ? { SendReceipt: "SendReceipt" } : name.includes("receipt.ts") ? receipt : name.includes("wallet.ts") ? wallet : name.includes("chain.ts") ? { origin: () => "https://unused.invalid" } : name.includes("i18n/") ? i18n : name.includes("market.ts") ? market : name.includes("feature-copy.ts") ? featureCopy : name.includes("contacts.ts") ? contacts : name.includes("donation.ts") ? donation : name.includes("web-links.ts") ? webLinks : name.includes("security-overview.ts") ? securityOverview : name.includes("account-copy.ts") ? accountCopy : name.includes("transactions.ts") ? transactions : {},
   });
@@ -143,4 +145,140 @@ test("settings open the Security Overview, which returns to settings and lists t
   assert.equal(title(), "钱包设置");
   const repos = securityOverview.extensionSecurity.flatMap((s) => s.repos || []);
   assert.deepEqual(repos.map((r) => r.url), ["https://github.com/terryops/prl-hub-wallet", "https://github.com/terryops/prl-hub", "https://github.com/terryops/prl-hub-web", "https://github.com/terryops/prl-hub-server"]);
+});
+// The Android app's add / manage wallets, as the iOS app's (WalletSwitcher.swift, Onboarding.swift).
+const words = PHRASE.split(" ");
+const dialogOf = (tree: Element, className?: string) => all(tree, (e) => e.type === "dialog" && e.props?.className === className)[0];
+const submitIn = (tree: Element) => all(dialogOf(tree), (e) => e.type === "form")[0].props.onSubmit({ preventDefault() {}, currentTarget: {} });
+test("Android: 创建钱包 asks for the name first, makes the phrase only on 生成助记词, steps back, and checks three words before saving", async () => {
+  const asked: string[] = [];
+  const app = mount({ exists: false, locked: true }, [], { deviceSecret: async (title) => { asked.push(title); return "s".repeat(43); } });
+  // The welcome screen (iOS WelcomeView): 创建新钱包, 用助记词恢复钱包, the read-only link.
+  for (const label of ["创建新钱包", "用助记词恢复钱包", "添加只读钱包"]) assert.ok(button(app.render(), label), label);
+  button(app.render(), "创建新钱包").props.onClick();
+  let tree = app.render();
+  assert.equal(dialogTitle(tree), "创建钱包");
+  assert.equal(content(dialogOf(tree)).includes("步骤 1 / 3"), true);
+  assert.equal(all(tree, (e) => e.type === "input" && e.props?.["aria-label"] === "钱包名称")[0].props.value, "Pearl Wallet");
+  assert.equal(button(tree, "上一步"), undefined, "no 上一步 on the first step");
+  assert.equal(all(tree, (e) => e.props?.className === "seed-grid").length, 0);
+  assert.equal(app.calls.some((m) => m.command === "generate"), false, "no phrase before 生成助记词");
+  // 生成助记词 → the phrase (12 words, no copy button).
+  submitIn(tree); await tick();
+  tree = app.render();
+  assert.deepEqual(app.calls.map((m) => m.command), ["generate"]);
+  assert.equal(content(dialogOf(tree)).includes("步骤 2 / 3"), true);
+  assert.deepEqual(all(tree, (e) => e.props?.className === "seed-word").map(content), words);
+  assert.equal(all(dialogOf(tree), (e) => e.type === "button" && /复制/.test(content(e))).length, 0);
+  // 上一步 drops the phrase; 生成助记词 makes a new one.
+  button(tree, "上一步").props.onClick();
+  tree = app.render();
+  assert.equal(content(dialogOf(tree)).includes("步骤 1 / 3"), true); assert.equal(all(tree, (e) => e.props?.className === "seed-word").length, 0);
+  submitIn(tree); await tick();
+  assert.equal(app.calls.filter((m) => m.command === "generate").length, 2);
+  button(app.render(), "我已安全备份").props.onClick();
+  tree = app.render();
+  assert.equal(content(dialogOf(tree)).includes("步骤 3 / 3"), true);
+  const groups = () => all(dialogOf(app.render()), (e) => e.props?.role === "group");
+  assert.equal(groups().length, 3);
+  for (const g of groups()) assert.equal(all(g, (e) => e.type === "button").length, 3, "three choices per word, as iOS");
+  const confirm = () => button(app.render(), "确认并创建");
+  assert.equal(confirm().props.disabled, true, "确认并创建 waits for all three");
+  // One wrong word: refused, and nothing is saved.
+  groups().forEach((g, n) => {
+    const position = Number(g.props["aria-labelledby"].slice(5)), right = words[position];
+    const pick = all(g, (e) => e.type === "button" && (n === 0 ? content(e) !== right : content(e) === right))[0];
+    pick.props.onClick();
+  });
+  assert.equal(confirm().props.disabled, false);
+  confirm().props.onClick(); await tick();
+  assert.equal(content(app.render()).includes("选择有误，请重试"), true);
+  assert.deepEqual(asked, []); assert.equal(app.calls.some((m) => m.command === "create"), false);
+  const first = groups()[0], position = Number(first.props["aria-labelledby"].slice(5));
+  all(first, (e) => e.type === "button" && content(e) === words[position])[0].props.onClick();
+  assert.equal(content(app.render()).includes("选择有误，请重试"), false);
+  confirm().props.onClick(); await tick(); await tick();
+  assert.deepEqual(asked, ["保存钱包"]);
+  const create = app.calls.find((m) => m.command === "create");
+  assert.equal(create.mnemonic, PHRASE); assert.equal(create.name, "Pearl Wallet"); assert.equal(create.password, "s".repeat(43));
+});
+test("Android: 恢复钱包 needs 12 or 24 words and hands the phrase to the vault as typed", async () => {
+  const app = mount({ exists: false, locked: true }, [], { deviceSecret: async () => "s".repeat(43) });
+  button(app.render(), "用助记词恢复钱包").props.onClick();
+  let tree = app.render();
+  assert.equal(dialogTitle(tree), "恢复钱包");
+  const save = () => all(dialogOf(app.render()), (e) => e.type === "button" && /恢复钱包/.test(content(e)) && e.props?.className === "primary wide")[0];
+  assert.equal(save().props.disabled, true);
+  all(tree, (e) => e.type === "textarea")[0].props.onChange({ target: { value: words.slice(0, 11).join(" ") } });
+  assert.equal(save().props.disabled, true); assert.equal(content(app.render()).includes("已输入 11 个词"), true);
+  all(app.render(), (e) => e.type === "textarea")[0].props.onChange({ target: { value: `  ${words.join("\n")} ` } });
+  assert.equal(save().props.disabled, false);
+  submitIn(app.render()); await tick(); await tick();
+  assert.equal(app.calls.find((m) => m.command === "create").mnemonic, `  ${words.join("\n")} `, "the vault normalizes the phrase");
+});
+test("Android: the switcher lists every wallet with 添加钱包 and 管理钱包; 管理钱包 switches, renames and removes in alerts", async () => {
+  const asked: string[] = [];
+  const view = { ...base, wallets: [base.wallets[0], { id: "two", name: "Watched", address: vectors.addresses[1], primaryAddress: vectors.addresses[1], index: 0, watch: true }, { id: "three", name: "C", address: vectors.addresses[2], primaryAddress: vectors.addresses[2], index: 0 }] };
+  const app = mount(view, [], { deviceSecret: async (title) => { asked.push(title); return "s".repeat(43); } });
+  let tree = app.render();
+  // The wallet page keeps no 管理钱包 grid: its actions are in the switcher and 设置 → 钱包与安全, as on iOS.
+  assert.equal(all(tree, (e) => e.props?.className === "manage-grid").length, 0);
+  all(tree, (e) => e.props?.id === "wallet-switcher")[0].props.onClick();
+  tree = app.render();
+  const items = all(tree, (e) => e.props?.role === "menuitemradio");
+  assert.deepEqual(items.map((e) => [content(all(e, (x) => x.type === "strong")[0]), e.props["aria-checked"]]), [["A", true], ["Watched", false], ["C", false]]);
+  assert.equal(content(items[1]).includes("只读 · "), true);
+  assert.deepEqual(all(tree, (e) => e.props?.role === "menuitem").map(content), ["添加钱包", "管理钱包"]);
+  all(tree, (e) => e.props?.role === "menuitem")[0].props.onClick();
+  tree = app.render();
+  assert.equal(dialogTitle(tree), "添加钱包");
+  for (const label of ["创建新钱包", "用助记词恢复钱包", "添加只读钱包"]) assert.ok(button(tree, label), label);
+  // 创建新钱包 from here: back (and ×) return to 添加钱包.
+  button(tree, "创建新钱包").props.onClick();
+  tree = app.render();
+  assert.equal(dialogTitle(tree), "创建钱包");
+  all(tree, (e) => e.props?.className === "icon-button dialog-back")[0].props.onClick();
+  assert.equal(dialogTitle(app.render()), "添加钱包");
+  all(app.render(), (e) => e.props?.["aria-label"] === "关闭")[0].props.onClick();
+  assert.equal(dialogTitle(app.render()), "");
+  // 管理钱包.
+  all(app.render(), (e) => e.props?.id === "wallet-switcher")[0].props.onClick();
+  all(app.render(), (e) => e.props?.role === "menuitem")[1].props.onClick();
+  tree = app.render();
+  assert.equal(dialogTitle(tree), "管理钱包");
+  const rows = () => all(app.render(), (e) => e.props?.className === "manage-row");
+  assert.equal(rows().length, 3);
+  assert.deepEqual(rows().map((r) => all(r, (e) => e.props?.["aria-label"] === "当前钱包").length), [1, 0, 0]);
+  assert.equal(content(rows()[1]).includes("只读"), true);
+  // A tap switches.
+  all(rows()[2], (e) => e.props?.className === "manage-open")[0].props.onClick();
+  await tick();
+  assert.deepEqual(app.calls.filter((m) => m.command === "select").map((m) => m.id), ["three"]);
+  // ••• → 重命名 → an alert with the name to edit.
+  const menu = (row: number) => { all(rows()[row], (e) => e.props?.className === "icon-button manage-more")[0].props.onClick(); return all(app.render(), (e) => e.props?.className === "row-menu")[0]; };
+  button(menu(2), "重命名").props.onClick();
+  tree = app.render();
+  const alert = () => dialogOf(app.render(), "wallet-alert");
+  assert.equal(content(all(alert(), (e) => e.type === "h2")[0]), "重命名钱包");
+  const field = () => all(alert(), (e) => e.type === "input")[0];
+  assert.equal(field().props.value, "C");
+  field().props.onChange({ target: { value: " Savings " } });
+  all(alert(), (e) => e.type === "form")[0].props.onSubmit({ preventDefault() {}, currentTarget: {} }); await tick();
+  assert.deepEqual(app.calls.filter((m) => m.command === "rename").map((m) => [m.id, m.name]), [["three", "Savings"]]);
+  // 删除 a read-only wallet: the address only, no device check.
+  button(menu(1), "删除").props.onClick();
+  assert.equal(content(all(alert(), (e) => e.type === "h2")[0]), "确定要移除钱包「Watched」吗？");
+  assert.equal(content(alert()).includes("只从本机删除这个地址，不影响链上资产，之后可以再添加。"), true);
+  button(alert(), "移除钱包").props.onClick(); await tick();
+  assert.deepEqual(app.calls.filter((m) => m.command === "watch-remove").map((m) => m.id), ["two"]); assert.deepEqual(asked, []);
+  // 删除 a wallet with a phrase: the phrase warning, 取消 keeps it, 移除钱包 asks for the device check first.
+  button(menu(2), "删除").props.onClick();
+  assert.equal(content(alert()).includes("助记词将从本机删除且无法恢复。请确认你已安全备份助记词，否则资产将永久丢失。"), true);
+  button(alert(), "取消").props.onClick();
+  assert.equal(all(alert(), (e) => e.type === "h2").length, 0);
+  button(menu(2), "删除").props.onClick();
+  button(alert(), "移除钱包").props.onClick(); await tick(); await tick();
+  assert.deepEqual(asked, ["移除钱包"]);
+  assert.deepEqual(app.calls.filter((m) => m.command === "delete").map((m) => [m.id, m.name, m.password]), [["three", "C", "s".repeat(43)]]);
+  assert.equal(dialogTitle(app.render()), "管理钱包", "管理钱包 stays open");
 });

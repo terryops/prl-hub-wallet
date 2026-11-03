@@ -1,4 +1,6 @@
 import type { Lang } from "./i18n/index.ts";
+import { loadFX, saveFX, FX_MAX_AGE, type FX } from "../shared/currency.ts";
+type FXStore = Parameters<typeof loadFX>[0];
 export const currencies = [
   { code: "CNY", symbol: "¥", decimals: 2 }, { code: "TWD", symbol: "NT$", decimals: 0 },
   { code: "HKD", symbol: "HK$", decimals: 2 }, { code: "RUB", symbol: "₽", decimals: 2 },
@@ -26,11 +28,25 @@ async function get(path: "price" | "fx", signal: AbortSignal) {
   if (!response.ok) throw new Error("Market unavailable");
   return response.json();
 }
-export async function loadMarket(signal: AbortSignal): Promise<Market> {
-  const [price, fx] = await Promise.allSettled([get("price", signal), get("fx", signal)]);
-  const p = price.status === "fulfilled" ? price.value : null, r = fx.status === "fulfilled" ? fx.value : null;
+// The table's rates for the wallet's currencies, if it is a current USD table.
+function ratesOf(r: Partial<FX> | null | undefined): Record<string, number> | undefined {
+  const all = r?.ok === true && r.base === "USD" && r.stale !== true && r.rates && typeof r.rates === "object" ? r.rates : undefined;
+  return all && Object.fromEntries(currencies.flatMap(({ code }) => typeof all[code] === "number" && Number.isFinite(all[code]) && all[code] > 0 ? [[code, all[code]]] : []));
+}
+// Rates move little within a day, so they are asked at most once a day (as iOS's CurrencyManager and the
+// website, shared/currency.ts); when a refresh fails the last table stays in use.
+async function loadRates(signal: AbortSignal, store?: FXStore) {
+  const cached = loadFX(store), last = ratesOf(cached?.fx);
+  if (cached && last && Date.now() - cached.at < FX_MAX_AGE) return last;
+  try {
+    const fx = await get("fx", signal), rates = ratesOf(fx);
+    if (rates) { saveFX(fx, Date.now(), store); return rates; }
+  } catch { /* Fall back to the last table. */ }
+  return last;
+}
+export async function loadMarket(signal: AbortSignal, store?: FXStore): Promise<Market> {
+  const [p, rates] = await Promise.all([get("price", signal).catch(() => null), loadRates(signal, store)]);
   // Same freshness boundary as AlertQuote.isFresh; stale prices must not look current.
   if (!p || typeof p.usd !== "number" || !Number.isFinite(p.usd) || p.usd <= 0 || typeof p.ts !== "number" || !Number.isFinite(p.ts) || Date.now() / 1000 - p.ts >= 300 || p.ts > Date.now() / 1000 + 60) return {};
-  const rates = r?.ok === true && r.base === "USD" && r.stale !== true && r.rates && typeof r.rates === "object" ? Object.fromEntries(currencies.flatMap(({ code }) => typeof r.rates[code] === "number" && Number.isFinite(r.rates[code]) && r.rates[code] > 0 ? [[code, r.rates[code]]] : [])) : undefined;
   return { usd: p.usd, rates };
 }

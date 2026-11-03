@@ -365,5 +365,7 @@
   "钱包页不再显示 NOCK 钱包，之后可以在「钱包设置」重新打开。": "Ví NOCK sẽ không còn hiển thị trên trang ví. Bạn có thể bật lại trong Cài đặt ví.",
   "在钱包页显示 NOCK 钱包": "Hiển thị Ví NOCK trên trang ví",
   "请离线手抄，切勿截图、拍照或复制——任何人拿到它都能转走你的资产。": "Hãy chép tay ngoại tuyến; đừng chụp màn hình, chụp ảnh hay sao chép — bất kỳ ai có nó đều chuyển được tài sản của bạn.",
-  "Pearl Hub 是开源项目，全部代码公开在 GitHub，没有广告和追踪。基础功能一直免费，捐赠和高级版的收入用来支付服务器和节点费用、维持更新。": "Pearl Hub là mã nguồn mở — toàn bộ mã công khai trên GitHub, không quảng cáo, không theo dõi. Các tính năng cơ bản vẫn miễn phí; tiền ủng hộ và tiền mua Pro dùng để trả chi phí máy chủ, node và duy trì cập nhật."
+  "Pearl Hub 是开源项目，全部代码公开在 GitHub，没有广告和追踪。基础功能一直免费，捐赠和高级版的收入用来支付服务器和节点费用、维持更新。": "Pearl Hub là mã nguồn mở — toàn bộ mã công khai trên GitHub, không quảng cáo, không theo dõi. Các tính năng cơ bản vẫn miễn phí; tiền ủng hộ và tiền mua Pro dùng để trả chi phí máy chủ, node và duy trì cập nhật.",
+  "已复制": "Đã sao chép",
+  "分享": "Chia sẻ"
 }

@@ -19,13 +19,15 @@ export function difficultyAgo(n: Network | undefined | null, w: DiffWindow, poin
   const mean = n[MEAN_KEY[w]];
   return mean && mean > 0 && 2 * mean > n.difficulty ? 2 * mean - n.difficulty : null;
 }
-/// The difficulty (or, inverse, output per TH) chart: the history's samples over the last 7 days and
-/// the overview's current value; without history, the window starts difficultyAgo estimates.
-export function difficultyPoints(n?: Network, inverse = false, points?: readonly NetworkPoint[]): number[][] {
+/// The difficulty (or, inverse, output per TH) chart: the history's samples over the last `seconds`
+/// (null: all of them) and the overview's current value; without history, the starts of the windows
+/// that fit the span, estimated by difficultyAgo. A sample up to a twentieth older than the span
+/// still counts: the history may have been read a little before the overview.
+export function difficultyPoints(n?: Network, inverse = false, points?: readonly NetworkPoint[], seconds: number | null = DIFF_WINDOWS["7d"]): number[][] {
   if (!n?.difficulty || (inverse && !n.prlPerTHDay)) return [];
   const v = (diff: number) => inverse ? n.prlPerTHDay! * 1000 * n.difficulty! / diff : diff;
-  const from = n.ts - DIFF_WINDOWS["7d"], samples = (points || []).filter((p) => p.difficulty > 0 && p.ts >= from && p.ts < n.ts).map((p) => [p.ts, p.difficulty] as [number, number]);
-  const past = samples.length ? samples : (["7d", "3d", "24h"] as const).map((w) => [n.ts - DIFF_WINDOWS[w], difficultyAgo(n, w)] as [number, number | null]);
+  const from = seconds == null ? -Infinity : n.ts - seconds * 1.05, samples = (points || []).filter((p) => p.difficulty > 0 && p.ts >= from && p.ts < n.ts).map((p) => [p.ts, p.difficulty] as [number, number]);
+  const past = samples.length ? samples : (["7d", "3d", "24h"] as const).filter((w) => seconds == null || DIFF_WINDOWS[w] <= seconds).map((w) => [n.ts - DIFF_WINDOWS[w], difficultyAgo(n, w)] as [number, number | null]);
   return [...past, [n.ts, n.difficulty] as [number, number]]
     .filter((p): p is [number, number] => p[1] != null && p[1] > 0).sort((a, b) => a[0] - b[0]).map(([t, diff]) => [t, v(diff)]);
 }

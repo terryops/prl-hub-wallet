@@ -15,7 +15,10 @@ try {
   const other = await context.newPage(); await other.goto(q.url); await other.locator('#wallet-settings').click(); await other.locator("#secondary").filter({ has: other.locator('option[value=""]:checked') }).waitFor();
   await page.locator("#secondary").selectOption("__auto__"); await other.waitForFunction(() => document.querySelector("#secondary").value === "__auto__"); await other.close();
   await closeDialog();
-  market.mode = "usd"; await page.reload(); await page.locator(".fiat").filter({ hasText: /^≈ \$20.00$/ }).waitFor();
+  // Rates are asked once a day (as iOS and the website): an FX outage keeps the cached table; with none, USD only.
+  market.mode = "usd"; await page.reload(); await page.locator(".fiat").filter({ hasText: "≈ $20.00 · ¥142.00" }).waitFor();
+  assert.equal(market.requests.filter((r) => r.url.endsWith("/fx")).length, 1);
+  await page.evaluate(() => localStorage.removeItem("pearlhub.fx")); await page.reload(); await page.locator(".fiat").filter({ hasText: /^≈ \$20.00$/ }).waitFor();
   market.mode = "off"; await page.reload(); await page.locator(".balance").waitFor();
   // Wait until both requests resolve before asserting the absent row.
   await page.waitForFunction(() => document.querySelector(".balance")?.textContent.includes("25.00"));

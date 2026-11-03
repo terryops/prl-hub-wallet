@@ -3,6 +3,7 @@
 // history yet) and a stand-in price. Nothing reaches a real node or nockscan; no transaction leaves the browser.
 import assert from "node:assert/strict";
 import { readFile, mkdir } from "node:fs/promises";
+import jsQR from "jsqr";
 import { fixtureWallet, fits } from "./qa-support.mjs";
 
 const out = "out/nock";
@@ -54,11 +55,11 @@ await worker.evaluate((fx) => {
   };
 }, fx);
 const calls = () => worker.evaluate(() => nockFixture.calls.length);
-const shots = async (name) => {
+const shots = async (name, pictures = [390, 1280]) => {
   for (const theme of ["light", "dark"]) for (const width of [320, 360, 390, 1280]) {
     await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" }); await page.setViewportSize({ width, height: 900 });
     await fits(page, `${name} ${theme} ${width}`);
-    if (width === 390 || width === 1280) await page.screenshot({ path: `${out}/${name}-${theme}-${width}.png`, fullPage: true });
+    if (pictures.includes(width)) await page.screenshot({ path: `${out}/${name}-${theme}-${width}.png`, fullPage: true });
   }
   await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" }); await page.setViewportSize({ width: 390, height: 900 });
 };
@@ -96,16 +97,99 @@ try {
   await dialog().getByRole("button", { name: "关闭", exact: true }).click();
   console.log("PASS page: 155 NOCK (85 available, 70 locked ~4 h), price and fiat, 3 recent rows, 4 in 全部");
 
-  // Receive: the address of the same seed; getting it marks the wallet as using NOCK.
-  await button("收 NOCK").click();
-  await dialog().locator(".receive code").filter({ hasText: fx.address }).waitFor();
-  await dialog().locator(".qr").waitFor();
+  // Receive (iOS NockReceiveView): one card (Nockchain with its ⓘ, the code with the NOCK hexagon in the middle, the
+  // address in groups), then the slim bar 复制地址 · 分享. Getting the address marks the wallet as using NOCK.
+  const card = dialog().locator(".nock-receive-card"), bar = dialog().locator(".nock-receive-bar button");
+  const openReceive = async () => { await button("收 NOCK").click(); await card.waitFor(); };
+  const closeReceive = () => dialog().getByRole("button", { name: "关闭", exact: true }).click();
+  const browserShares = await page.evaluate(() => typeof navigator.share === "function");
+  await openReceive();
+  assert.equal(await dialog().locator(".dialog-title h2").innerText(), "收 NOCK");
+  assert.equal(await card.locator(".nock-receive-chain").innerText(), "Nockchain");
+  const tip = card.getByRole("button", { name: "NOCK 收款地址 · Nockchain 主网", exact: true });
+  await tip.click();
+  await dialog().locator(".info-tip-bubble").filter({ hasText: "NOCK 收款地址 · Nockchain 主网" }).filter({ hasText: "这个地址只收 NOCK，别往这里转 PRL。" }).waitFor();
+  await tip.click();
+  // The address: 4-character groups set out 5 / 5 / 4 (a NOCK address is 14 groups), first and last group bold, one
+  // button named 复制收款地址 whose description is the address itself.
+  const addressButton = card.getByRole("button", { name: "复制收款地址", exact: true });
+  const lines = await addressButton.locator("code > span").evaluateAll((rows) => rows.map((row) => [...row.children].map((g) => g.textContent)));
+  assert.deepEqual(lines.map((line) => line.length), [5, 5, 4]);
+  assert.equal(lines.flat().join(""), fx.address);
+  assert.deepEqual(await addressButton.locator(".edge").allInnerTexts(), [fx.address.slice(0, 4), fx.address.slice(52)]);
+  assert.equal(await page.locator(`[id="${await addressButton.getAttribute("aria-describedby")}"]`).textContent(), fx.address);
+  const addressRows = () => addressButton.locator("code > span > span").evaluateAll((groups) => new Set(groups.map((g) => Math.round(g.getBoundingClientRect().top))).size);
+  // 分享 only where there is a share sheet; without one the bar is 复制地址 alone, with no divider.
+  assert.deepEqual(await bar.allInnerTexts(), browserShares ? ["复制地址", "分享"] : ["复制地址"]);
+  // Copying: from the bar or by tapping the address; the bar says 已复制 for 2 s, and no message on the page behind.
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await dialog().getByRole("button", { name: "复制地址", exact: true }).click();
+  await bar.first().click();
   assert.equal(await page.evaluate(() => navigator.clipboard.readText()), fx.address);
-  await shots("receive");
-  await dialog().getByRole("button", { name: "关闭", exact: true }).click();
-  console.log("PASS receive: address, QR, copy");
+  const copiedAt = Date.now();
+  await bar.first().filter({ hasText: "已复制" }).waitFor();
+  assert.equal(await bar.first().locator(".icon path").getAttribute("d"), "M416 128 192 384l-96-96", "a check mark while copied");
+  await dialog().locator('[role="status"]').filter({ hasText: "已复制" }).waitFor();
+  await bar.first().filter({ hasText: "复制地址" }).waitFor({ timeout: 4000 });
+  const shown = Date.now() - copiedAt;
+  assert.ok(shown > 1500 && shown < 3500, `已复制 for ${shown} ms`);
+  assert.equal(await page.locator(".message").filter({ hasText: "已复制" }).count(), 0, "the bar says it, not a message on the page");
+  await page.evaluate(() => navigator.clipboard.writeText("-"));
+  await addressButton.click();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), fx.address);
+  await bar.first().filter({ hasText: "已复制" }).waitFor();
+  await closeReceive();
+  // A browser with no navigator.share (qa.share "none"), then one whose share sheet is a stand-in ("stub"); the page
+  // reads it as it loads.
+  await page.addInitScript(() => {
+    const mode = sessionStorage.getItem("qa.share");
+    globalThis.shared = [];
+    if (mode) Object.defineProperty(Navigator.prototype, "share", { configurable: true, writable: true, value: mode === "stub" ? async (data) => { shared.push(data); } : undefined });
+  });
+  const reloadWith = async (mode) => {
+    await page.evaluate((mode) => sessionStorage.setItem("qa.share", mode), mode);
+    await page.reload(); await page.locator(".nock-strip").click(); await page.locator(".nock-summary").waitFor();
+  };
+  // Without a share sheet: no 分享, and no divider.
+  await reloadWith("none");
+  await openReceive();
+  assert.deepEqual(await bar.allInnerTexts(), ["复制地址"]);
+  assert.equal(await bar.first().evaluate((b) => getComputedStyle(b).borderInlineStartWidth), "0px");
+  await shots("receive-noshare", [320, 390]);
+  await closeReceive();
+  // With one: 分享 after a divider hands it the address.
+  await reloadWith("stub");
+  await openReceive();
+  assert.deepEqual(await bar.allInnerTexts(), ["复制地址", "分享"]);
+  assert.equal(await bar.nth(1).evaluate((b) => getComputedStyle(b).borderInlineStartWidth), "1px");
+  await bar.nth(1).click();
+  assert.deepEqual(await page.evaluate(() => shared), [{ text: fx.address }]);
+  // The code scans with the hexagon on it, in both themes and at every width: a screenshot of the plate, read by
+  // jsQR. Version 5 is level Q for this address (M would fit in version 4, H needs 6). The middle is the black
+  // hexagon on its white square.
+  const plate = dialog().locator(".nock-qr");
+  for (const theme of ["light", "dark"]) for (const width of [320, 390, 1280]) {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" }); await page.setViewportSize({ width, height: 900 });
+    const png = (await plate.screenshot()).toString("base64");
+    const shot = await page.evaluate(async (png) => {
+      const image = new Image(); image.src = `data:image/png;base64,${png}`; await image.decode();
+      const canvas = document.createElement("canvas"); canvas.width = image.width; canvas.height = image.height;
+      const g = canvas.getContext("2d", { willReadFrequently: true }); g.drawImage(image, 0, 0);
+      const { data } = g.getImageData(0, 0, image.width, image.height), w = image.width;
+      const at = (x, y) => data[(Math.round(y * image.height) * w + Math.round(x * w)) * 4];
+      let bytes = ""; for (let i = 0; i < data.length; i += 0x8000) bytes += String.fromCharCode(...data.subarray(i, i + 0x8000));
+      return { width: w, height: image.height, rgba: btoa(bytes), centre: at(0.5, 0.5), square: [at(0.43, 0.5), at(0.57, 0.5), at(0.5, 0.43), at(0.5, 0.57)] };
+    }, png);
+    const read = jsQR(new Uint8ClampedArray(Buffer.from(shot.rgba, "base64")), shot.width, shot.height);
+    assert.equal(read?.data, fx.address, `the code reads back as the address (${theme} ${width})`);
+    assert.equal(read.version, 5, `level Q (${theme} ${width})`);
+    assert.ok(shot.centre < 64 && shot.square.every((v) => v > 240), `the hexagon on its white square (${theme} ${width}): ${JSON.stringify(shot)}`.slice(0, 200));
+    assert.equal(await addressRows(), 3, `three lines of groups (${theme} ${width})`);
+  }
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" }); await page.setViewportSize({ width: 390, height: 900 });
+  await shots("receive", [320, 390, 1280]);
+  await closeReceive();
+  await reloadWith("");
+  console.log(`PASS receive: card, ⓘ, address 5/5/4 with its description, copy → 已复制 for ${shown} ms, 分享 only with a share sheet (this browser: ${browserShares ? "has" : "has none"}), the marked code reads back at level Q`);
 
   // Send: checks while typing, the receipt, the password, then one broadcast.
   await button("转 NOCK").click();
@@ -218,6 +302,11 @@ try {
     await worker.evaluate((language) => chrome.storage.local.set({ language }), language);
     await page.waitForFunction((language) => document.documentElement.lang === language, language);
     await fits(page, `NOCK page ${language} 320`);
+    await page.locator(".nock-actions button").first().click(); await card.waitFor();
+    await fits(page, `NOCK receive ${language} 320`);
+    assert.ok(await bar.evaluateAll((buttons) => buttons.every((b) => { const label = b.lastElementChild; return label.getBoundingClientRect().height < 1.5 * parseFloat(getComputedStyle(label).lineHeight); })), `${language}: the bar's labels stay on one line`);
+    if (["ru", "de", "hi", "th"].includes(language)) await page.screenshot({ path: `${out}/receive-${language}-320.png` });
+    await dialog().locator(".dialog-title button").click();
     await page.locator(".nock-actions button").nth(1).click();
     await dialog().locator("textarea").fill(fx.recipient); await dialog().locator('input[inputmode="decimal"]').fill("0.5");
     await fits(page, `NOCK send ${language} 320`);

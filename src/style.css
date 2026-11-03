@@ -454,7 +454,23 @@ dd { min-width: 0; margin: 0; text-align: right; overflow-wrap: anywhere; font-v
 .field-note.error { color: var(--red); }
 .field-note.warn { color: var(--warn); }
 p.field-note[role="alert"] { margin: 12px 0; }
-.nock-receive-label { margin: 0 0 8px !important; font-size: var(--font-13) !important; font-weight: 600; color: var(--text) !important; }
+/* 收 NOCK (iOS NockReceiveView): one card (the chain with its ⓘ, the code on its own white plate, the address in
+   groups) and the page's slim bar under it, 复制地址 · 分享. Narrower than the other NOCK dialogs, as on iOS. */
+@media (min-width: 641px) { .nock-dialog.narrow { max-width: 420px; } }
+.nock-receive-card { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 12px 16px 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--soft); }
+.nock-receive-chain { display: flex; align-items: center; gap: 4px; color: var(--muted); font-size: var(--font-14); font-weight: 600; line-height: 1.4; }
+.nock-qr { width: min(212px, 100%); padding: 8px; border-radius: 12px; background: #fff; }
+.nock-qr svg { display: block; width: 100%; height: auto; }
+.nock-receive-address { display: block; width: 100%; min-height: 0; padding: 2px 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); font-weight: 400; }
+.nock-receive-address:hover { background: transparent; }
+.nock-receive-address code { display: block; font-size: var(--font-16); line-height: 1.75; }
+/* A line per row of groups, centred; a line too wide for the card wraps between groups, never inside one. */
+.nock-receive-address code > span { display: flex; flex-wrap: wrap; justify-content: center; column-gap: .6ch; }
+.nock-receive-address .edge { color: var(--text); font-weight: 700; }
+.nock-receive-bar { margin: 12px 0 0; background: var(--soft); }
+/* One line each, as on iOS: halves, unless a long label (Russian at 320 px) needs more of the bar. */
+.nock-receive-bar button { flex: 1 1 0; min-width: auto; }
+.nock-receive-bar button > span { white-space: nowrap; }
 .nock-detail .receipt-hero p { margin: 6px 0 0; }
 .nock-txid { display: block; padding: 12px 0; font-size: var(--font-12); }
 .nock-tx-actions { margin-top: 10px; }
@@ -493,7 +509,8 @@ div.shortcut-row { position: relative; padding: 0; }
 .welcome .watch-link > button:not(.info-tip) { width: auto; min-height: 36px; padding: 6px 8px; gap: 6px; border: 0; background: transparent; color: var(--blue-text); font-weight: 550; }
 .welcome .watch-link > button:not(.info-tip):hover { background: transparent; }
 .watch-link .icon { width: 16px; height: 16px; }
-.welcome .watch-link .info-tip { width: 24px; }
+.welcome .info-tip { width: 24px; }
+.welcome h1 .info-tip { margin-left: 4px; }
 .wallet-badges { display: flex; flex: none; align-items: center; gap: 6px; }
 .network-badge.watch-chip { display: inline-flex; align-items: center; gap: 4px; }
 .wallet-badges .network-badge { max-width: none; }

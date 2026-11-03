@@ -1,6 +1,6 @@
 # Web interface icons
 
-All 50 functional icon names use the original selected SVG drawings from
+All 52 functional icon names use the original selected SVG drawings from
 [Ionicons 8.1.0](https://www.npmjs.com/package/ionicons/v/8.1.0),
 [upstream repository](https://github.com/ionic-team/ionicons). The outlined family
 provides a consistent iOS-style appearance for the cross-platform website.
@@ -32,11 +32,13 @@ and `options` (`options-outline.svg`). The extension ships the license as
 | `alerts` | `notifications-outline.svg` |
 | `app` | `phone-portrait-outline.svg` |
 | `mac` | `desktop-outline.svg` |
+| `android` | `logo-android.svg` |
 | `settings` | `settings-outline.svg` |
 | `appearance` | `color-palette-outline.svg` |
 | `refresh` | `refresh-outline.svg` |
 | `qr` | `qr-code-outline.svg` |
 | `send` | `paper-plane-outline.svg` |
+| `mail` | `mail-outline.svg` |
 | `history` | `time-outline.svg` |
 | `plus` | `add-outline.svg` |
 | `minus` | `remove-outline.svg` |
@@ -79,3 +81,16 @@ To update the drawings, retrieve the pinned Ionicons npm package and select
 `dist/svg/<source>.svg` using the mapping above. Preserve all child shapes and
 attributes; React uses camelCase names for hyphenated SVG attributes. Retain
 the package LICENSE in the public license file.
+
+The Android app's 交易 tab adds seven shapes from the same package, kept out of `icon-symbols.tsx` (which the
+browser wallet shares): `trade`, the tab bar's, in `src/android-icons.tsx`, and the rest in `src/trade-icons.tsx`:
+
+| Interface name | Ionicons source |
+| --- | --- |
+| `trade` | `swap-horizontal-outline.svg` |
+| `expand` | `expand-outline.svg` |
+| `contract` | `contract-outline.svg` |
+| `help` | `help-circle-outline.svg` |
+| `info` | `information-circle-outline.svg` |
+| `deposit` | `arrow-down-circle-outline.svg` |
+| `withdraw` | `arrow-up-circle-outline.svg` |

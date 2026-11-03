@@ -355,6 +355,28 @@ SF Symbols 的授权只允许用于 Apple 平台的软件，不能随跨平台�
 
 **商店资料（0.1.7）**：简短说明（`_locales` 和 `store/*.json`）加上 NOCK；英文详细说明加了 NOCK 一段，并把「Blockbook 接收查询」改成先走自建索引；其他 15 种语言的详细说明、权限理由和数据使用说明按英文重新翻译（之前的版本由界面提示语拼成，还夹着英文段落）。`permissionJustifications` 多了可选权限 `http://216.158.95.10/*`，`test/store.test.ts` 要求可选权限也有理由。后台要手动改的单一用途、主机权限理由和审核说明见 `store/SUBMIT.md` 第八节；`scripts/store-release.mjs` 新增 `upload`（只传草稿）和 `publish`（提交已上传的草稿），用于先传包、改后台、再提交。
 
+## 0.1.10（2026-11-03）
+
+**插件里看得到的变化**
+
+- **收 NOCK**（对照 iOS NockReceiveView）：一张卡片里是链名和 ⓘ、二维码、按 4 个字符分组的地址（点一下复制），下面一条「复制地址 · 分享」。二维码改成 SVG，放在自己的白底上（深色模式也能扫），中间是 NOCK 六边形标记，纠错级别 Q，不会和 PRL 的收款码弄混。地址分行时每行组数尽量平均（`addressLines`）。「分享」只在有分享面板的地方出现（Android App 用 App 的，浏览器用 `navigator.share`）。
+- **汇率一天只取一次**（同 iOS CurrencyManager 和网页 `currency.ts`）：`src/market.ts` 用 `shared/currency.ts` 的 `loadFX` / `saveFX` 把汇率表存在 `localStorage` 的 `pearlhub.fx`，一天内不再请求 `/v1/fx`（之前每 60 秒一次）；刷新失败时继续用上一份表，没有缓存才只显示美元。PRL 价格仍每 60 秒取、超过 5 分钟就不显示。`test/features.mjs` 的「汇率失败只显示美元」改成先确认缓存仍在用、清掉缓存后才只显示美元。
+- **解锁页的 ⓘ**：「钱包已锁定」旁的 ⓘ 是按钮，被 `.welcome button { width: 100% }` 撑满一行，图标跑到标题下方居中。`.welcome .info-tip` 固定 24px（原来只管只读钱包那一行），标题后留 4px。
+
+**Android App 里的钱包（同一份代码，`ANDROID` 分支，对照 iOS 2.1.9）**
+
+- 钱包切换菜单里有「添加钱包」「管理钱包」；「管理钱包」是单独一页，任意一个钱包都能重命名、移除，不用先切换过去（后台 `delete` 在 Android 上接受 `id`）。移除有助记词的钱包要先通过设备验证。
+- 「创建钱包」分三步：起名 → 生成助记词（到这一步才生成）→ 核对（随机三个位置，每个位置三选一）。恢复钱包时，本机已有的助记词直接打开那个钱包，不再报错。
+- 系统返回键一层层退：先关提示框和菜单，再退创建的上一步、退回下面的面板，最后是 NOCK 页。
+- NOCK 默认关闭（同 iOS 2.1.9 起的 `NockWalletStore.enabled`），在「设置 → 钱包与安全」打开；关闭时不派生 NOCK 密钥、不连节点、钱包页没有 NOCK 入口，已存的记录保留。升级后第一次运行时，本机有钱包用过 NOCK 就保持打开（`src/nock/enabled.ts`）。原来「关掉钱包页 NOCK 那一行」的开关在 Android 上由它取代；插件里不变。
+- 「价格提醒」改名「价格和到账提醒」；`window.__pearlWallet.wallets({ readOnly: true })` 把只读钱包也列给到账提醒。
+
+**共用文件**
+
+- **`npm run sync:shared`**（prl-hub-web 10-27 至 11-03 的改动）：`types.ts`（矿池字段）、`icon-symbols.tsx` 和 `ICONS.md`（`android`、`mail`）、`market.ts`（难度图可选时间跨度）、`currency.ts`（汇率缓存）、`account-copy.ts`。`account-copy.ts` 在 Android App 里改用「本机购买」的说法，因此带进了网页的 `android.ts`、`android.css`、`android-copy.json`；插件构建里 `ANDROID` 为 false，这些都被去掉（插件包只多约 1.7 KB）；Android 钱包构建会打包整份 `android-copy.json`（约 300 KB，gzip 约 80 KB），钱包用不到那几句。`android.ts` 懒加载 CSS，加了 `src/css.d.ts`（同网页）。
+
+**验证**：`npm test` 207/207（新增：汇率一天一次、刷新失败沿用上一份、过期的表不存；Android 的 NOCK 开关首次运行与保存；`addressLines`）、`tsc --noEmit`、插件与 Android 构建；浏览器 QA `browser`、`features`、`review-ui`、`transactions`、`nock`、`android-wallets`、`languages` 16 种语言，全部通过。`test/languages.mjs` 锁定页原来按标题的完整可访问名称找，0.1.9 把 ⓘ 放进标题后名称变成「钱包已锁定 说明」，这一步一直失败（0.1.9 没跑这项）；改为在 `main.locked h1` 里找标题文字。解锁页另用 320 / 390 px、深浅色截图核对 ⓘ 在标题同一行。
+
 ## 0.1.9（2026-10-28）
 
 **插件里看得到的变化**（对照原生 App 2.1.7）

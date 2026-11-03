@@ -69,25 +69,6 @@
 .field-note { display: block; margin: -6px 0 10px; color: var(--muted); font-size: var(--font-12); }
 .donation-source { display: block; margin-top: 10px; font-size: var(--font-12); }
 .balance.cached { opacity: .65; }
-/* iOS VerifyStep: pick each of three words. */
-.quiz.quiz-choices { grid-template-columns: minmax(0, 1fr); gap: 12px; }
-.quiz-choices fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
-.quiz-choices legend { margin-bottom: 6px; color: var(--muted); font-size: var(--font-12); }
-.quiz-choices fieldset > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-.quiz-choices button { min-height: 38px; font-family: ui-monospace, monospace; }
-.quiz-choices button.selected { border-color: var(--blue); background: var(--selected); color: var(--blue-text); }
-/* 管理钱包 row menu. */
-.wallet-row { display: flex; align-items: center; gap: 4px; }
-.wallet-row .wallet-choice { flex: 1; min-width: 0; }
-.wallet-row-menu { position: relative; }
-.wallet-row-menu summary { display: grid; place-items: center; width: 36px; height: 36px; cursor: pointer; list-style: none; }
-.wallet-row-menu summary::-webkit-details-marker { display: none; }
-.wallet-row-menu[open] > button { position: absolute; right: 0; z-index: 2; min-width: 120px; }
-.wallet-row-menu[open] > button:first-of-type { top: 38px; }
-.wallet-row-menu[open] > button:last-of-type { top: 82px; }
-/* The open menu hangs below its row: give the list room so it stays inside the sheet, above the
-   tab bar, instead of needing a scroll to reach 删除. */
-.wallet-list:has(.wallet-row-menu[open]) { padding-bottom: 64px; }
 /* 找回搁浅的找零. */
 .recover { display: grid; gap: 10px; }
 .recover p { margin: 0; }
@@ -104,3 +85,119 @@ button.recent-row { width: 100%; border: 0; border-radius: 0; background: transp
 .android-update-open > .icon { width: 22px; height: 22px; color: var(--blue-text); flex-shrink: 0; }
 .android-update-open strong { flex: 1; font-size: var(--font-13); }
 .android-update-open > span { padding: 5px 12px; border-radius: 999px; background: var(--blue); color: white; font-size: var(--font-12); }
+
+/* Adding and managing wallets as in the iOS app (WalletSwitcher.swift, Onboarding.swift, WalletRootView.swift). */
+.dialog-title h2 { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.dialog-title { gap: 4px; }
+.dialog-back { margin-left: -8px; color: var(--blue-text); }
+.dialog-back .icon, .flow-back .icon { transform: rotate(90deg); }
+
+/* The switcher's menu (WalletSwitcherMenu): every wallet, then 添加钱包 and 管理钱包. */
+.wallet-bar { position: relative; }
+.wallet-switcher .switcher-watch { width: 18px; height: 18px; }
+.switcher-menu { position: absolute; top: calc(100% + 4px); left: -6px; z-index: 20; width: min(300px, calc(100% + 6px)); padding: 6px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); box-shadow: 0 12px 32px rgb(0 0 0 / 18%); }
+.switcher-section { margin: 4px 10px 2px; color: var(--muted); font-size: var(--font-12); font-weight: 600; }
+.switcher-item { display: flex; width: 100%; min-height: 44px; justify-content: flex-start; gap: 10px; padding: 8px 10px; border: 0; border-radius: 10px; background: transparent; color: var(--text); text-align: start; font-weight: 500; }
+.switcher-item:hover { background: var(--hover); }
+.switcher-mark { display: grid; flex: none; place-items: center; width: 20px; color: var(--blue-text); }
+.switcher-mark .icon { width: 17px; height: 17px; }
+.switcher-text { display: grid; min-width: 0; line-height: 1.4; }
+.switcher-text strong, .switcher-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.switcher-text strong { font-weight: 600; }
+.switcher-text small { font-size: var(--font-12); font-weight: 400; }
+.switcher-menu hr { margin: 6px 4px; border: 0; border-top: 1px solid var(--line); }
+
+/* 添加钱包 (AddWalletView) and the welcome screen (WelcomeView): two seed buttons, then the quiet read-only link. */
+.add-wallet { display: flex; flex-direction: column; gap: 2px; }
+.add-badge { display: grid; place-items: center; width: 56px; height: 56px; margin: 4px auto 14px; border-radius: 18px; background: var(--selected); color: var(--blue-text); }
+.add-badge .icon { width: 28px; height: 28px; }
+.add-wallet .wide { margin: 4px 0; }
+.add-wallet .watch-link { margin-top: 10px; }
+.add-wallet .watch-link > button:not(.info-tip) { width: auto; min-height: 36px; padding: 6px 8px; gap: 6px; border: 0; background: transparent; color: var(--blue-text); font-weight: 550; }
+.add-wallet .watch-link > button:not(.info-tip):hover { background: transparent; }
+.add-wallet .watch-link .info-tip { width: 24px; }
+.add-wallet .wide .icon, .welcome > button .icon, .create-flow .wide .icon, form .wide > .icon { width: 18px; height: 18px; }
+.wallet-hero { --hero-text: #21384f; --hero-edge: rgb(218 230 242 / .75); --hero-gradient: linear-gradient(135deg, #fcfeff, #f0f8fb, #e4effb); display: flex; align-items: center; gap: 14px; padding: 14px 16px; border: 1px solid var(--hero-edge); border-radius: 22px; background: var(--hero-gradient); color: var(--hero-text); }
+:root[data-theme="dark"] .wallet-hero { --hero-text: #f3f7fc; --hero-edge: rgb(81 86 94 / .7); --hero-gradient: linear-gradient(135deg, #2c2f35, #292c31, #26282e); }
+.wallet-hero img { flex: none; width: 52px; height: 52px; }
+.wallet-hero strong { min-width: 0; font-size: var(--font-20); font-weight: 700; letter-spacing: -.3px; overflow-wrap: anywhere; }
+.welcome:not(.locked) { padding-inline: 20px; }
+.welcome > button { text-align: center; }
+.welcome .welcome-hero { flex-direction: column; justify-content: center; gap: 10px; min-height: 190px; margin-bottom: 10px; }
+.welcome-hero img { width: 72px; height: 72px; }
+.welcome .welcome-hero h1 { margin: 0; font-size: var(--font-28); letter-spacing: -.6px; }
+.welcome .watch-link { margin-top: 2px; }
+.welcome .welcome-note { max-width: none; margin: 8px 0 0; color: var(--muted); font-size: var(--font-12); line-height: 1.55; text-align: center; }
+
+/* 创建钱包 in three steps (CreateWalletView) and 恢复钱包 (ImportWalletView). */
+.flow-steps { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; margin: -6px 0 10px; }
+.flow-back { min-height: 32px; padding: 4px 8px 4px 0; gap: 2px; border: 0; background: transparent; color: var(--blue-text); font-size: var(--font-14); font-weight: 500; }
+.flow-back:hover { background: transparent; }
+.flow-back .icon { width: 16px; height: 16px; }
+.flow-step-badge { --violet: #6c4fe0; display: inline-flex; flex: none; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 999px; background: color-mix(in srgb, var(--violet) 13%, transparent); color: var(--violet); font-size: var(--font-12); font-weight: 600; white-space: nowrap; }
+:root[data-theme="dark"] .flow-step-badge { --violet: #b9a6ff; }
+.flow-step-badge .icon { width: 12px; height: 12px; }
+.flow-hero { margin-bottom: 14px; }
+.flow-hero img { width: 46px; height: 46px; }
+.flow-badge { display: grid; flex: none; place-items: center; width: 46px; height: 46px; border-radius: 15px; background: linear-gradient(135deg, #43c9a9, #2b9f88); color: #fff; }
+.flow-badge .icon { width: 22px; height: 22px; }
+.flow-progress { height: 4px; margin: 0 0 16px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.flow-progress span { display: block; width: 33.34%; height: 100%; border-radius: inherit; background: var(--blue); transition: width .2s; }
+.flow-progress[data-step="2"] span { width: 66.67%; }
+.flow-progress[data-step="3"] span { width: 100%; }
+.flow-card { margin: 0 0 14px; padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: var(--soft); }
+.flow-card input, .flow-card textarea { background: var(--surface); }
+.flow-card > small { display: block; margin-top: 8px; }
+.flow-head { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; font-size: var(--font-14); font-weight: 650; }
+.flow-head .icon { flex: none; width: 17px; height: 17px; color: var(--blue-text); }
+.flow-head-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.flow-head-row .flow-head { min-width: 0; margin: 0; }
+.flow-paste { flex: none; min-height: 30px; padding: 4px 10px; font-size: var(--font-12); }
+.phrase-input { font-family: ui-monospace, monospace; }
+.seed-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.seed-grid > div { display: flex; align-items: baseline; gap: 8px; min-width: 0; padding: 9px 10px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.seed-grid small { flex: none; width: 20px; color: var(--blue-text); font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.seed-word { min-width: 0; font-family: ui-monospace, monospace; font-size: var(--font-14); overflow-wrap: anywhere; }
+.flow-warning { display: flex; align-items: flex-start; gap: 8px; margin: 0 0 14px; color: var(--warn); font-size: var(--font-13); line-height: 1.5; }
+.flow-warning .icon { flex: none; width: 18px; height: 18px; margin-top: 1px; }
+.flow-verify { margin: 0 0 12px; }
+.quiz-card p { margin: 0 0 8px; color: var(--muted); font-size: var(--font-13); }
+.quiz-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.quiz-options button { min-width: 0; min-height: 44px; padding: 10px 4px; background: var(--surface); font-family: ui-monospace, monospace; font-weight: 500; overflow-wrap: anywhere; }
+.quiz-options button.selected { border-color: var(--blue); background: var(--selected); color: var(--blue-text); font-weight: 700; }
+.flow-error { display: flex; align-items: center; gap: 6px; margin: 0 0 12px; color: var(--red); font-size: var(--font-13); }
+.flow-error .icon { flex: none; width: 16px; height: 16px; }
+.primary.positive { border-color: var(--green); background: var(--green); color: var(--on-blue); }
+.primary.positive:hover { background: var(--green); color: var(--on-blue); }
+
+/* 管理钱包 (ManageWalletsView): a tap opens the wallet; ••• or a long press offers 重命名 and 删除. */
+.manage-list { display: grid; gap: 8px; }
+.manage-list:has(.row-menu) { padding-bottom: 76px; }
+.manage-row { position: relative; display: flex; align-items: center; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.manage-open { flex: 1; min-width: 0; justify-content: flex-start; gap: 12px; padding: 12px 6px 12px 12px; border: 0; background: transparent; color: var(--text); text-align: start; -webkit-touch-callout: none; user-select: none; }
+.manage-open:hover { background: transparent; }
+.manage-badge { display: grid; flex: none; place-items: center; width: 34px; height: 34px; border-radius: 11px; background: var(--selected); color: var(--blue-text); }
+.manage-badge .icon { width: 18px; height: 18px; }
+.manage-text { display: grid; flex: 1; min-width: 0; gap: 1px; line-height: 1.4; }
+.manage-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.manage-name strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 650; }
+.manage-watch { flex: none; padding: 1px 7px; border-radius: 999px; background: var(--soft); color: var(--muted); font-size: 11px; font-weight: 600; }
+.manage-text small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, monospace; font-weight: 400; }
+.manage-current { display: grid; flex: none; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--blue); color: var(--on-blue); }
+.manage-current .icon { width: 14px; height: 14px; }
+.manage-more { margin-right: 4px; }
+.row-menu { position: absolute; top: calc(100% - 4px); right: 6px; z-index: 5; display: grid; min-width: 160px; padding: 6px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); box-shadow: 0 12px 32px rgb(0 0 0 / 18%); }
+.row-menu button { justify-content: flex-start; gap: 10px; min-height: 40px; padding: 8px 10px; border: 0; background: transparent; font-weight: 500; }
+.row-menu button:hover { background: var(--hover); }
+.row-menu .icon { width: 17px; height: 17px; }
+
+/* 管理钱包's alerts (iOS .alert): centred, not a sheet. */
+dialog.wallet-alert { width: min(320px, calc(100% - 48px)); max-width: 320px; margin: auto; border: 1px solid var(--line); border-radius: 20px; }
+.wallet-alert-inner { padding: 20px 18px 16px; text-align: center; }
+.wallet-alert h2 { margin: 0 0 8px; font-size: var(--font-16); font-weight: 650; letter-spacing: 0; overflow-wrap: anywhere; }
+.wallet-alert p { margin: 0 0 16px; color: var(--muted); font-size: var(--font-13); line-height: 1.5; }
+.wallet-alert input { margin: 6px 0 16px; }
+.wallet-alert .message { margin: 0 0 12px; text-align: start; }
+.wallet-alert-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.wallet-alert-actions button { min-width: 0; padding-inline: 8px; overflow-wrap: anywhere; }
+.wallet-alert-actions .danger-button { font-weight: 650; }

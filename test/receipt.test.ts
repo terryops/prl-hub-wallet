@@ -6,7 +6,7 @@ import ts from "typescript";
 import * as receipt from "../src/receipt.ts";
 import * as i18n from "../src/i18n/index.ts";
 import { DONATION_ADDRESS } from "../src/donation.ts";
-const { HIGH_FEE, feeIsHigh, addressGroups, receiptAmount } = receipt;
+const { HIGH_FEE, feeIsHigh, addressGroups, addressLines, receiptAmount } = receipt;
 const vectors = JSON.parse(readFileSync(new URL("./native-vectors.json", import.meta.url), "utf8"));
 
 test("the fee warning starts above 5 × the native app's 0.001 PRL send reserve", () => {
@@ -23,6 +23,20 @@ test("addresses split into 4-character groups that join back to the address", ()
   assert.ok(groups.at(-1)!.length >= 1 && groups.at(-1)!.length <= 4);
   assert.deepEqual(addressGroups("prl1abcdef"), ["prl1", "abcd", "ef"]);
   assert.deepEqual(addressGroups(""), []);
+});
+
+test("a centred address sets its lines up front and spreads the groups evenly (iOS perLine)", () => {
+  const sizes = (groups: number, perLine = 5) => addressLines("x".repeat(groups * 4), perLine).map((line) => line.length);
+  // A NOCK address: 55 characters, 14 groups → 5 / 5 / 4, not 6 / 6 / 2.
+  const nock = JSON.parse(readFileSync(new URL("./nock-fixtures.json", import.meta.url), "utf8")).address as string;
+  assert.equal(nock.length, 55);
+  assert.deepEqual(addressLines(nock, 5).map((line) => line.length), [5, 5, 4]);
+  assert.equal(addressLines(nock, 5).flat().join(""), nock);
+  assert.deepEqual(sizes(16), [4, 4, 4, 4]);
+  assert.deepEqual(sizes(11), [4, 4, 3]);
+  assert.deepEqual(sizes(10), [5, 5]);
+  assert.deepEqual(sizes(3), [3]);
+  assert.deepEqual(addressLines("", 5), []);
 });
 
 test("amounts are grouped like the balance, with up to 8 decimals and no trailing zeros", () => {
