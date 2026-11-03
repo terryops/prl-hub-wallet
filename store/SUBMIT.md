@@ -166,3 +166,5 @@ node scripts/store-release.mjs submit --staged   # 审核通过后先暂存，�
 ## 十一、0.1.10：收 NOCK 卡片、汇率一天一次
 
 清单只改了版本号，权限、主机权限、CSP 都没有变化。「分享」用浏览器自带的 `navigator.share`，不需要权限。汇率表缓存在插件自己的 `localStorage` 里，是公开数据，不含地址或身份，请求仍是同一个 `pearlhub.net/v1/fx`（只是一天一次），所以 Privacy practices、隐私政策、Test instructions、详细说明都不用改，直接 `npm run store:submit`。
+
+**已完成（2026-11-03）**：`npm run store:submit` 上传并提交 0.1.10（67f0f55，商店包 SHA-256 `713569f6…`），状态 PENDING_REVIEW 0.1.10，通过后自动发布；在架仍是 0.1.9。GitHub Release v0.1.10 的 ZIP SHA-256 `aaa3ecc3…`，从标签全新克隆 `npm ci && npm run package` 重建，解包后与发布的 ZIP 逐个文件相同。
