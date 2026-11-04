@@ -65,6 +65,25 @@ test("a 到达目标价 (reach) price alert in the account does not stop contact
     assert.deepEqual(config.rules, [reach]);
   } finally { globalThis.fetch = original; }
 });
+test("a Peryn pool monitor in the account does not stop contact sync, and is kept", async () => {
+  // pearlhub.net and the apps monitor Peryn addresses since 2026-11-04; a copy of store.ts without it
+  // refused the whole config ("invalid_config"), as the reach alerts did before.
+  const userId = "u_account-fixture", original = fetch;
+  const storage: Record<string, unknown> = { [ACCOUNT]: { user_id: userId, access_token: "A".repeat(43), refresh_token: "B".repeat(43), expires_at: Date.now() + 900000 }, [CONTACTS]: [contact], [CONTACT_LINK]: { userId, base: {} } };
+  Object.assign(globalThis, { chrome: { storage: { local: { get: async (key: string) => ({ [key]: storage[key] }), set: async (rows: object) => Object.assign(storage, rows) } } } });
+  const peryn = { id: "MON-PERYN", updated: 5, label: "Rigs", pool: "Peryn", addr: vectors.addresses[1], alert: false, after: 600 };
+  let config = { ...configOf(defaults()), monitors: [peryn] }, puts = 0;
+  globalThis.fetch = async (url, init) => {
+    if (String(url).endsWith("/v1/account")) return Response.json({ pro: true });
+    if (init!.method === "GET") return Response.json({ rev: puts, schema_version: 1, data: config });
+    puts++; config = JSON.parse(init!.body as string).data; return Response.json({});
+  };
+  try {
+    await syncContacts(() => {});
+    assert.equal(puts, 1); assert.equal(config.contacts[0].id, contact.id);
+    assert.deepEqual(config.monitors, [peryn]);
+  } finally { globalThis.fetch = original; }
+});
 test("contacts declined at a free sign-in are not uploaded once the account has Pro", async () => {
   const userId = "u_account-fixture", original = fetch, declined = { ...contact, id: "declined", address: vectors.addresses[1] }, added = { ...contact, id: "added" };
   const storage: Record<string, unknown> = { [ACCOUNT]: { user_id: userId, access_token: "A".repeat(43), refresh_token: "B".repeat(43), expires_at: Date.now() + 900000 }, [CONTACTS]: [declined, added], [CONTACT_LINK]: { userId, base: {}, localOnly: ["declined"] } };

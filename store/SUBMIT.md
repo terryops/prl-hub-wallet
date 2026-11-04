@@ -1,4 +1,4 @@
-# Chrome 商店注册与提交清单（Pearl Hub Wallet 0.1.2 起，0.1.7 的改动见第八节，0.1.8 见第九节，0.1.9 见第十节，0.1.10 见第十一节）
+# Chrome 商店注册与提交清单（Pearl Hub Wallet 0.1.2 起，0.1.7 的改动见第八节，0.1.8 见第九节，0.1.9 见第十节，0.1.10 见第十一节，0.1.11 见第十二节）
 
 按商店后台的顺序逐项填写。英文文案取自 `store/en.json`，其他语言取自对应的 `store/<语言>.json`。
 
@@ -168,3 +168,8 @@ node scripts/store-release.mjs submit --staged   # 审核通过后先暂存，�
 清单只改了版本号，权限、主机权限、CSP 都没有变化。「分享」用浏览器自带的 `navigator.share`，不需要权限。汇率表缓存在插件自己的 `localStorage` 里，是公开数据，不含地址或身份，请求仍是同一个 `pearlhub.net/v1/fx`（只是一天一次），所以 Privacy practices、隐私政策、Test instructions、详细说明都不用改，直接 `npm run store:submit`。
 
 **已完成（2026-11-03）**：`npm run store:submit` 上传并提交 0.1.10（67f0f55，商店包 SHA-256 `713569f6…`），状态 PENDING_REVIEW 0.1.10，通过后自动发布；在架仍是 0.1.9。GitHub Release v0.1.10 的 ZIP SHA-256 `aaa3ecc3…`，从标签全新克隆 `npm ci && npm run package` 重建，解包后与发布的 ZIP 逐个文件相同。
+
+## 十二、0.1.11：账号里有 Peryn 监控时联系人照常同步
+
+pearlhub.net 和各 App 从 2026-11-04 起能监控 Peryn（peryn.ai）矿池的地址。插件的联系人同步会读整份账号配置，旧的 `shared/store.ts` 不认识这个矿池，整份配置判为 invalid_config，联系人同步一直失败（不丢数据）。0.1.11 只同步了这份矿池列表（`npm run sync:shared`），加了一条测试。清单只改版本号，权限、主机权限、CSP、隐私做法都没变，直接 `npm run store:submit`。
+
