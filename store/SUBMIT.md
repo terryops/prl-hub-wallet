@@ -173,3 +173,5 @@ node scripts/store-release.mjs submit --staged   # 审核通过后先暂存，�
 
 pearlhub.net 和各 App 从 2026-11-04 起能监控 Peryn（peryn.ai）矿池的地址。插件的联系人同步会读整份账号配置，旧的 `shared/store.ts` 不认识这个矿池，整份配置判为 invalid_config，联系人同步一直失败（不丢数据）。0.1.11 只同步了这份矿池列表（`npm run sync:shared`），加了一条测试。清单只改版本号，权限、主机权限、CSP、隐私做法都没变，直接 `npm run store:submit`。
 
+
+**已完成（2026-11-04）**：`npm run store:submit` 上传并提交 0.1.11（da0b7ec，商店包 SHA-256 `977055c3…`），状态 PENDING_REVIEW 0.1.11，通过后自动发布；在架是 0.1.10（11-04 前已过审）。GitHub Release v0.1.11 的 ZIP SHA-256 `b98d036c…`，从标签全新克隆 `npm ci && npm run package` 重建，两个包解开后与发布的逐个文件相同。
