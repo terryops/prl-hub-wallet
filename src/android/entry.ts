@@ -1,5 +1,6 @@
 // The Android app's wallet page (/wallet/ inside the app): the extension's service worker and
 // panel in one document, on the chrome.* shim. See BRIDGE.md in the prl-hub-android repository.
+import "../../shared/old-webview.ts";
 import { setVersion } from "./shim.ts";
 import { pearlHost } from "../../shared/android-host.ts";
 import { nativeCall, installNativeHelpers } from "../../shared/android-bridge.ts";
@@ -16,7 +17,10 @@ applyAppearance();
 host?.subscribe(applyAppearance);
 installNativeHelpers();
 
-const info = await nativeCall<{ versionName: string }>("info").catch(() => null);
-setVersion(info?.versionName || "");
-await import("../background.ts");
-await import("../main.tsx");
+// No top-level await: WebView before Chrome 89 can't parse it, and the page stayed blank (vite.android.config.ts).
+void (async () => {
+  const info = await nativeCall<{ versionName: string }>("info").catch(() => null);
+  setVersion(info?.versionName || "");
+  await import("../background.ts");
+  await import("../main.tsx");
+})();
